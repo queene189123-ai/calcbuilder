@@ -28,7 +28,7 @@
     $('authUser').textContent=currentUser?currentUser.email:'';
     $('accountBtn').textContent=currentUser?'Кабинет':'Войти';
     if(currentUser) await loadCompanies();
-    else { activeCompany=null; $('companyList').innerHTML=''; }
+    else { activeCompany=null; $('companyList').innerHTML=''; window.snabproResetWorkspace?.(); }
   }
   async function loadCompanies(){
     const {data,error}=await client.from('companies').select('id,name,created_at').order('created_at',{ascending:true});
@@ -37,7 +37,7 @@
     list.innerHTML='';
     if(!data?.length){
       list.innerHTML='<div class="account-empty">Пока нет зарегистрированного предприятия. Создайте рабочее пространство ниже.</div>';
-      activeCompany=null;return;
+      activeCompany=null;window.snabproResetWorkspace?.();return;
     }
     data.forEach(company=>{
       const row=document.createElement('button');
@@ -48,7 +48,7 @@
     });
     const saved=localStorage.getItem('sp_company_id');
     activeCompany=data.find(c=>c.id===saved)||data[0];
-    if(activeCompany){localStorage.setItem('sp_company_id',activeCompany.id);localStorage.setItem('sp_company_name',activeCompany.name);}
+    if(activeCompany){localStorage.setItem('sp_company_id',activeCompany.id);localStorage.setItem('sp_company_name',activeCompany.name);await window.snabproLoadWorkspace?.(activeCompany);}
     [...list.children].forEach((el,i)=>el.classList.toggle('selected',data[i]?.id===activeCompany?.id));
     note(activeCompany?'Рабочее пространство подключено. Данные предприятия будут храниться отдельно.':'');
   }
