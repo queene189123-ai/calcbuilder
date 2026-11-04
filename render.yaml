@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: calcbuilder-demo
+    name: snabpro-demo
     runtime: static
     buildCommand: echo "No build step required"
     staticPublishPath: ./public
