@@ -62,7 +62,29 @@ const recs=[['Проверить альтернативного поставщи
 function recHtml(a){return a.map(r=>'<div class="recommend"><div><h4>'+r[0]+'</h4><p>'+r[1]+'</p></div><div class="saving">'+r[2]+'</div></div>').join('')}
 function renderDashboard(){$('statPurchases').textContent=purchases.filter(p=>p.status!=='Завершена').length;$('statSuppliers').textContent=suppliers.length;$('dashPurchases').innerHTML=purchases.slice(0,4).map(p=>'<tr><td class="strong">'+eh(p.name)+'</td><td>'+p.vendors+'</td><td><span class="pill">'+eh(p.status)+'</span></td><td>'+eh(p.date)+'</td></tr>').join('')||'<tr><td colspan="4" class="empty">Создайте первую закупку</td></tr>';$('dashRecs').innerHTML=recHtml(recs.slice(0,2))}
 function renderAll(){renderMaterials();renderSuppliers();renderPurchases();renderDashboard();$('recommendations').innerHTML=recHtml(recs);renderQuotes()}
-function openPurchase(){let chosen=materials.filter(m=>m.selected),items=chosen.length?chosen:materials.slice(0,2);let rows=items.map(m=>'<div class="field full" style="border:1px solid var(--line);padding:9px;border-radius:8px"><label><input type="checkbox" class="pcheck" data-id="'+m.id+'" checked> '+eh(m.name)+' · '+eh(m.spec)+'</label><div class="field"><label>Количество ('+eh(m.unit)+')</label><input type="number" min="1" value="'+(m.cat==='Трубы'?300:m.cat==='Металл'?50:100)+'" id="qty'+m.id+'"></div><small class="muted">Поставщики: '+suppliers.filter(s=>s.cats.includes(m.cat)).map(s=>eh(s.name)).join(', ')+'</small></div>').join('');modal('Сформировать закупку','<div class="notice">Выберите позиции и количество. Позиции будут распределены по сохранённым поставщикам, которые работают с соответствующей категорией.</div><div class="formgrid">'+rows+'<div class="field full"><label>Комментарий</label><textarea id="pc" rows="2" style="width:100%;border:1px solid var(--line);border-radius:8px;padding:9px" placeholder="Срок, доставка, оплата…"></textarea></div></div><div class="notice warn">Отправка писем пока имитируется: реальные письма не отправляются.</div><div class="modalfoot"><button class="btn" onclick="closeModal()">Отмена</button><button class="btn primary" id="modalSave">Создать запросы</button></div>',()=>{let ids=[...document.querySelectorAll('.pcheck:checked')].map(x=>+x.dataset.id),sel=materials.filter(m=>ids.includes(m.id));if(!sel.length){toast('Выберите позицию');return false}let v=new Set();sel.forEach(m=>suppliers.filter(s=>s.cats.includes(m.cat)).forEach(s=>v.add(s.id)));purchases.unshift({id:Date.now(),name:'Закупка · '+sel.slice(0,2).map(m=>m.name).join(', '),items:sel.map(m=>m.name+' · '+($('qty'+m.id).value||1)+' '+m.unit).join('; '),vendors:v.size,replies:0,status:'Ожидаем ответы',date:new Date().toLocaleDateString('ru-RU')});save();renderAll();toast('Демо-закупка создана. Подготовлены запросы для '+v.size+' поставщиков.');go('purchases');return true})}
+function openPurchase(){
+ let chosen=materials.filter(m=>m.selected),items=chosen.length?chosen:materials.slice(0,2);
+ let rows=items.map(m=>'<div class="field full" style="border:1px solid var(--line);padding:9px;border-radius:8px"><label><input type="checkbox" class="pcheck" data-id="'+m.id+'" checked> '+eh(m.name)+' · '+eh(m.spec)+'</label><div class="field"><label>Количество ('+eh(m.unit)+')</label><input type="number" min="1" value="'+(m.cat==='Трубы'?300:m.cat==='Металл'?50:100)+'" id="qty'+m.id+'"></div><small class="muted">Поставщики: '+suppliers.filter(s=>s.cats.includes(m.cat)).map(s=>eh(s.name)).join(', ')+'</small></div>').join('');
+ modal('Сформировать закупку','<div class="notice">Выберите позиции и количество. СнабПро подготовит отдельное письмо для каждого подходящего поставщика.</div><div class="formgrid">'+rows+'<div class="field full"><label>Комментарий к запросу</label><textarea id="pc" rows="2" style="width:100%;border:1px solid var(--line);border-radius:8px;padding:9px" placeholder="Срок, доставка, оплата…"></textarea></div></div><div class="notice warn">В демоверсии письма открываются в вашей почтовой программе. Автоматическая отправка и мониторинг ответов подключаются отдельно.</div><div class="modalfoot"><button class="btn" onclick="closeModal()">Отмена</button><button class="btn primary" id="modalSave">Создать закупку и письма</button></div>',()=>{
+  let ids=[...document.querySelectorAll('.pcheck:checked')].map(x=>+x.dataset.id),sel=materials.filter(m=>ids.includes(m.id));
+  if(!sel.length){toast('Выберите позицию');return false}
+  const quantities=sel.map(m=>({id:m.id,name:m.name,spec:m.spec,qty:Math.max(1,Number($('qty'+m.id).value)||1),unit:m.unit,cat:m.cat}));
+  const vendorMap=new Map();
+  sel.forEach(m=>suppliers.filter(s=>s.cats.includes(m.cat)).forEach(v=>{
+   if(!vendorMap.has(v.id))vendorMap.set(v.id,{supplier:v,items:[]});
+   vendorMap.get(v.id).items.push(quantities.find(q=>q.id===m.id));
+  }));
+  const batchId=Date.now(),comment=$('pc').value.trim(),title='Запрос КП · '+sel.slice(0,2).map(m=>m.name).join(', ');
+  const drafts=[...vendorMap.values()].map(({supplier,items})=>{
+   const subject=title;
+   const body='Добрый день!\n\nПросим подготовить коммерческое предложение на следующие позиции:\n\n'+items.map(x=>'• '+x.name+' — '+x.spec+'; количество: '+x.qty+' '+x.unit).join('\n')+'\n\nПросим указать:\n1. Цену за единицу и общую стоимость;\n2. Наличие и возможный объём поставки;\n3. Срок поставки;\n4. Стоимость и условия доставки;\n5. НДС и условия оплаты;\n6. Срок действия предложения.'+(comment?'\n\nДополнительный комментарий: '+comment:'')+'\n\nБудем благодарны за ответ на это письмо.\n\nС уважением, отдел снабжения';
+   return {id:batchId+'-'+supplier.id,batchId,to:supplier.email||'',supplier:supplier.name,subject,body,items,createdAt:new Date().toISOString(),status:'Черновик'};
+  });
+  emailDrafts=emailDrafts.concat(drafts);localStorage.setItem('sp_email_drafts',JSON.stringify(emailDrafts));
+  purchases.unshift({id:batchId,name:title,items:quantities.map(x=>x.name+' · '+x.qty+' '+x.unit).join('; '),vendors:vendorMap.size,replies:0,status:'Черновики готовы',date:new Date().toLocaleDateString('ru-RU'),draftBatch:batchId,comment});
+  save();renderAll();toast('Закупка создана. Подготовлено писем: '+drafts.length);go('purchases');return true;
+ });
+}
 function showPurchase(id){let p=purchases.find(x=>x.id===id);modal(p.name,'<div class="notice warn">Демо-сценарий: настоящие письма и коммерческие предложения пока не подключены.</div><p style="font-size:11px"><b>Позиции:</b> '+eh(p.items)+'</p><p style="font-size:11px"><b>Поставщиков:</b> '+p.vendors+' · <b>Ответов:</b> '+p.replies+'</p><p style="font-size:11px"><b>Статус:</b> '+eh(p.status)+'</p><div class="panel"><div class="panelhead"><h3>Пример сравнения</h3></div><div class="tablewrap"><table><tr><th>Поставщик</th><th>Цена</th><th>Срок</th></tr><tr><td>МеталлСнаб Север</td><td>8 500 ₽/лист</td><td>2 дня</td></tr><tr><td>СтальТрейд</td><td>7 900 ₽/лист</td><td>7 дней</td></tr></table></div></div><div class="modalfoot"><button class="btn" onclick="closeModal()">Закрыть</button><button class="btn primary" id="modalSave">Завершить закупку</button></div>',()=>{p.status='Завершена';p.replies=p.vendors;save();renderAll();toast('Закупка завершена');return true})}
 function marketSearch(){let m=$('marketMaterial').value,r=$('marketRegion').value,q=$('marketQty').value,p=$('marketPriority').value;$('marketResults').innerHTML='<div class="panel"><div class="panelhead"><h3>Результаты демонстрационного поиска</h3><span class="pill orange">Примеры · не проверены</span></div><div class="panelbody"><p class="muted" style="font-size:10px">Запрос: '+eh(m)+' · '+eh(r)+' · '+eh(q)+' · '+eh(p)+'</p><div class="suppliergrid"><div class="suppliercard"><h4>СеверМет Ресурс</h4><div class="suppliermeta">Пример цены: 7 900 ₽/лист<br>Срок: 7–10 дней<br>Требуется проверка</div><span class="pill orange">Не подтверждено</span></div><div class="suppliercard"><h4>БалтикПром Снаб</h4><div class="suppliermeta">Пример цены: 8 150 ₽/лист<br>Срок: 3–5 дней<br>Требуется проверка</div><span class="pill orange">Не подтверждено</span></div><div class="suppliercard"><h4>РегионКомплект</h4><div class="suppliermeta">Цена по запросу<br>Срок уточняется<br>Требуется проверка</div><span class="pill orange">Не подтверждено</span></div></div><div class="notice" style="margin-top:12px">В реальной версии следующий шаг — проверить компанию, запросить КП и сопоставить марку, размеры, НДС, доставку и сроки.</div></div></div>'}
 function runAnalysis(){toast('Демо-анализ: 4 рекомендации, потенциальная экономия 87 000 ₽.');$('recommendations').innerHTML=recHtml(recs)}
@@ -78,6 +100,7 @@ const demoQuotes=[
 {id:106,material:'АБС-пластик · лист 3 мм',supplier:'ПластКомплект',unitPrice:2050,qty:100,delivery:1500,vat:'НДС включён',lead:3,unit:'лист',spec:'АБС · 3000×1500×3 мм',status:'Получено',source:'Образец КП'}
 ];
 let quoteOffers=get('sp_quotes',demoQuotes);
+let emailDrafts=get('sp_email_drafts',[]);
 const money=n=>new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(Math.round(n))+' ₽';
 function quotesForSelected(){let m=$('quoteMaterial')?.value||'Труба нержавеющая Ø25 мм';return quoteOffers.filter(q=>q.material===m)}
 function renderQuotes(){
@@ -99,10 +122,28 @@ function openQuoteImport(){
  });
 }
 function showRequestPreview(){
- const chosen=materials.filter(m=>m.selected),items=chosen.length?chosen:materials.slice(0,2),vendors=[...new Set(items.flatMap(m=>suppliers.filter(s=>s.cats.includes(m.cat)).map(s=>s.name)))];
- modal('Подготовка запросов поставщикам','<div class="notice warn">Почтовый аккаунт ещё не подключён. Сейчас можно проверить содержание писем, но отправка отключена.</div><p style="font-size:11px"><b>Будут подготовлены запросы для '+vendors.length+' поставщиков:</b></p><div class="suppliermeta">'+vendors.map(eh).join('<br>')+'</div><hr style="border:0;border-top:1px solid var(--line);margin:14px 0"><b style="font-size:11px">Текст письма</b><div class="notice" style="margin-top:8px">Добрый день! Просим предоставить коммерческое предложение на следующие позиции:<br>'+items.map(m=>'• '+eh(m.name)+' — '+eh(m.spec)).join('<br>')+'<br><br>Просим указать цену, наличие, срок поставки, стоимость доставки, НДС и условия оплаты.</div><div class="modalfoot"><button class="btn" onclick="closeModal()">Закрыть</button><button class="btn primary" onclick="closeModal();toast(\'Черновики подготовлены. Отправка появится после подключения почты.\')">Понятно</button></div>',()=>true);
+ const batch=emailDrafts.length?emailDrafts[emailDrafts.length-1].batchId:null;
+ let drafts=batch?emailDrafts.filter(d=>d.batchId===batch):[];
+ if(!drafts.length){
+  const items=materials.filter(m=>m.selected).slice(0,4);
+  const vendors=[...new Map(items.flatMap(m=>suppliers.filter(v=>v.cats.includes(m.cat))).map(v=>[v.id,v])).values()];
+  drafts=vendors.map(v=>({to:v.email||'',supplier:v.name,subject:'Запрос коммерческого предложения',body:'Добрый день! Просим предоставить коммерческое предложение на:\n'+items.filter(m=>v.cats.includes(m.cat)).map(m=>'• '+m.name+' — '+m.spec).join('\n')+'\n\nУкажите цену, наличие, срок поставки, доставку, НДС и условия оплаты.'}));
+ }
+ if(!drafts.length){toast('Сначала создайте закупку и выберите позиции');return}
+ const cards=drafts.map((d,i)=>{
+  const href=d.to?'mailto:'+encodeURIComponent(d.to)+'?subject='+encodeURIComponent(d.subject)+'&body='+encodeURIComponent(d.body):'';
+  return '<div class="panel" style="padding:12px;margin:10px 0"><div class="panelhead"><h3>'+eh(d.supplier)+'</h3><span class="pill">'+(d.status==='Отправлено'?'Отправлено':'Черновик')+'</span></div><p class="muted">'+(d.to?eh(d.to):'Email поставщика не указан — добавьте его в карточке поставщика')+'</p><div class="notice" style="white-space:pre-wrap">'+eh(d.body)+'</div><div class="modalfoot">'+(href?'<a class="btn primary" href="'+href+'">Открыть письмо в почте ↗</a>':'<button class="btn" disabled>Нужен email поставщика</button>')+'<button class="btn" onclick="copyDraft('+i+')">Копировать текст</button></div></div>';
+ }).join('');
+ modal('Запросы поставщикам','<div class="notice">Письма сформированы по каждой компании с учётом только тех материалов, которые она поставляет. Нажмите «Открыть письмо в почте» — адресат, тема и текст подставятся автоматически. Письмо отправится только после вашего нажатия «Отправить» в почтовой программе.</div>'+cards+'<div class="modalfoot"><button class="btn" onclick="closeModal()">Закрыть</button></div>',()=>true);
 }
-
+function copyDraft(i){
+ const batch=emailDrafts.length?emailDrafts[emailDrafts.length-1].batchId:null;
+ const drafts=batch?emailDrafts.filter(d=>d.batchId===batch):[];
+ const d=drafts[i];if(!d){toast('Черновик не найден');return}
+ const text='Кому: '+d.to+'\nТема: '+d.subject+'\n\n'+d.body;
+ if(navigator.clipboard?.writeText)navigator.clipboard.writeText(text).then(()=>toast('Текст письма скопирован')).catch(()=>toast('Не удалось скопировать текст'));
+ else toast('Скопируйте текст из окна письма');
+}
 async function renderUploadedDocuments(prefetched){
  const el=$('uploadedDocs');if(!el)return;
  const company=window.snabproGetCompany?.(),client=window.snabproClient;
