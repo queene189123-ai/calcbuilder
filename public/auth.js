@@ -77,8 +77,10 @@
     if(!user){note('Сессия истекла. Войдите снова.',true);return;}
     $('companyCreate').disabled=true;
     try{
-      const {data,error}=await client.from('companies').insert({name,created_by:user.id}).select('id,name,created_at').single();
+      const {data:rows,error}=await client.rpc('create_company_for_current_user',{p_name:name});
       if(error) throw error;
+      const data=Array.isArray(rows)?rows[0]:rows;
+      if(!data?.id) throw new Error('Предприятие не было создано. Повторите попытку.');
       activeCompany=data;
       localStorage.setItem('sp_company_id',data.id);
       localStorage.setItem('sp_company_name',data.name);
