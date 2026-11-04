@@ -63,10 +63,33 @@ function showRequestPreview(){
  const chosen=materials.filter(m=>m.selected),items=chosen.length?chosen:materials.slice(0,2),vendors=[...new Set(items.flatMap(m=>suppliers.filter(s=>s.cats.includes(m.cat)).map(s=>s.name)))];
  modal('Подготовка запросов поставщикам','<div class="notice warn">Почтовый аккаунт ещё не подключён. Сейчас можно проверить содержание писем, но отправка отключена.</div><p style="font-size:11px"><b>Будут подготовлены запросы для '+vendors.length+' поставщиков:</b></p><div class="suppliermeta">'+vendors.map(eh).join('<br>')+'</div><hr style="border:0;border-top:1px solid var(--line);margin:14px 0"><b style="font-size:11px">Текст письма</b><div class="notice" style="margin-top:8px">Добрый день! Просим предоставить коммерческое предложение на следующие позиции:<br>'+items.map(m=>'• '+eh(m.name)+' — '+eh(m.spec)).join('<br>')+'<br><br>Просим указать цену, наличие, срок поставки, стоимость доставки, НДС и условия оплаты.</div><div class="modalfoot"><button class="btn" onclick="closeModal()">Закрыть</button><button class="btn primary" onclick="closeModal();toast(\'Черновики подготовлены. Отправка появится после подключения почты.\')">Понятно</button></div>',()=>true);
 }
-function importQuoteFile(){
+async function importQuoteFile(){
  const f=$('quoteFile')?.files?.[0];if(!f){toast('Выберите файл');return}
  const ext=f.name.split('.').pop().toLowerCase();
- if(!['csv','txt','eml'].includes(ext)){toast('Для демо-импорта используйте CSV, TXT или EML. PDF/XLSX/DOCX подключим к серверному распознаванию.');return}
+ if(['pdf','xlsx','xls','docx','doc'].includes(ext)){
+  const client=window.snabproClient,company=window.snabproGetCompany?.();
+  if(!client){toast('Модуль подключения не загружен. Обновите страницу.');return}
+  if(!company){toast('Сначала войдите и зарегистрируйте предприятие через кнопку «Войти».');return}
+  try{
+   const {data:{user},error:userError}=await client.auth.getUser();
+   if(userError||!user){toast('Войдите в аккаунт перед загрузкой документа.');return}
+   const safeName=f.name.replace(/[^a-zA-Z0-9._-]+/g,'_').slice(-120)||'quote.'+ext;
+   const token=window.crypto?.randomUUID?.()||String(Date.now());
+   const path=company.id+'/'+token+'-'+safeName;
+   const mime=f.type||({pdf:'application/pdf',xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',xls:'application/vnd.ms-excel',docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',doc:'application/msword'}[ext]);
+   const {error:uploadError}=await client.storage.from('quote-documents').upload(path,f,{contentType:mime,upsert:false});
+   if(uploadError)throw uploadError;
+   const {error:rowError}=await client.from('quote_documents').insert({
+    company_id:company.id,storage_path:path,original_filename:f.name,mime_type:mime,
+    extraction_status:'uploaded',uploaded_by:user.id
+   });
+   if(rowError){await client.storage.from('quote-documents').remove([path]);throw rowError;}
+   toast('Документ безопасно сохранён в закрытом хранилище предприятия. AI-распознавание подключим следующим серверным этапом.');
+   $('quoteFile').value='';
+  }catch(e){toast('Не удалось загрузить документ: '+(e.message||'ошибка доступа'))}
+  return;
+ }
+ if(!['csv','txt','eml'].includes(ext)){toast('Поддерживаются CSV, TXT, EML, PDF, XLSX, XLS, DOCX и DOC.');return}
  const reader=new FileReader();reader.onload=()=>{const t=String(reader.result||'');const lines=t.split(/\r?\n/).filter(Boolean);let added=0;
   lines.slice(1).forEach(line=>{const cells=line.split(/[;,\t]/).map(x=>x.trim().replace(/^"|"$/g,''));if(cells.length>=4){const [material,supplier,price,qty,delivery='0',vat='Не указано',lead='0',spec=''] = cells;const m=material.toLowerCase().includes('труб')?'Труба нержавеющая Ø25 мм':material.toLowerCase().includes('абс')?'АБС-пластик · лист 3 мм':'Нержавеющая сталь AISI 304 · лист';if(Number(price)>0&&Number(qty)>0){quoteOffers.push({id:Date.now()+added,material:m,supplier,unitPrice:Number(price),qty:Number(qty),delivery:Number(delivery)||0,vat,lead:Number(lead)||0,unit:m.includes('Труба')?'м':'лист',spec:spec||'Не указано',status:'Импортировано',source:f.name});added++}}});
   if(!added){const price=(t.match(/(?:цена|price)\D{0,15}(\d+[.,]?\d*)/i)||[])[1];toast(price?'Формат не распознан автоматически. Добавьте КП вручную.':'Не удалось извлечь табличные строки. Используйте шаблон CSV.');return}
