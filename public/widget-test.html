@@ -1,1 +1,16 @@
-<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Проверка виджета CalcBuilder</title></head><body style="margin:0;padding:40px;background:#f5f6fa;font-family:Arial,sans-serif"><h1 style="font-size:22px">Тест установки на сайт</h1><p>Ниже показан тот же калькулятор, встроенный на отдельную страницу.</p><div class="calcbuilder-embed" data-config='{"name":"Рассчитайте стоимость уборки","description":"Ответьте на несколько вопросов и узнайте цену за минуту","totalLabel":"Предварительная стоимость","buttonLabel":"Получить точный расчёт","accent":"#6858e8","fields":[{"id":1,"type":"range","label":"Площадь помещения","min":30,"max":200,"step":10,"value":70,"price":35,"unit":"м²"},{"id":2,"type":"select","label":"Тип уборки","options":[{"name":"Поддерживающая","price":0},{"name":"Генеральная","price":2500},{"name":"После ремонта","price":5000}],"selected":0},{"id":4,"type":"checkbox","label":"Мытьё окон","price":1200,"checked":false}]}'></div><script src="widget.js"></script></body></html>
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Тест виджета CalcBuilder — металлообработка</title>
+</head>
+<body style="margin:0;padding:32px 16px;background:#f5f6fa;font-family:Arial,sans-serif;color:#182238">
+<main style="max-width:760px;margin:auto">
+<h1 style="font-size:24px">Тест установки калькулятора металлообработки</h1>
+<p style="color:#68738a">Так будет выглядеть виджет, встроенный на сайт металлообрабатывающей компании.</p>
+<div class="calcbuilder-embed" data-config='{"name":"Рассчитайте стоимость лазерной резки","description":"Выберите материал и толщину, укажите длину реза и количество врезок","totalLabel":"Предварительная стоимость резки","buttonLabel":"Оставить заявку","accent":"#6858e8","fields":[{"id":1,"type":"select","label":"Материал","options":[{"name":"Чёрная сталь","price":0},{"name":"Нержавеющая сталь","price":350},{"name":"Алюминий","price":500}],"selected":0},{"id":2,"type":"select","label":"Толщина металла","options":[{"name":"1–2 мм","price":0},{"name":"3–4 мм","price":250},{"name":"5–6 мм","price":550},{"name":"8–10 мм","price":950},{"name":"12 мм и более","price":1500}],"selected":1},{"id":3,"type":"range","label":"Общая длина реза","min":1,"max":200,"step":1,"value":30,"price":65,"unit":"м"},{"id":4,"type":"number","label":"Количество врезок","value":30,"price":12},{"id":5,"type":"number","label":"Количество деталей","value":10,"price":0},{"id":6,"type":"checkbox","label":"Зачистка кромки","price":700,"checked":false}]}'></div>
+<script src="widget.js"></script>
+</main>
+</body>
+</html>
