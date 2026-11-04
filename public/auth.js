@@ -4,6 +4,8 @@
   const $ = id => document.getElementById(id);
   let currentUser = null;
   let activeCompany = null;
+  window.snabproClient = client;
+  window.snabproGetCompany = () => activeCompany;
   const panel = () => $('accountPanel');
   function note(message, bad=false) {
     const el=$('accountNote');
