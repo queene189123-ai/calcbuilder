@@ -102,6 +102,17 @@ function showRequestPreview(){
  const chosen=materials.filter(m=>m.selected),items=chosen.length?chosen:materials.slice(0,2),vendors=[...new Set(items.flatMap(m=>suppliers.filter(s=>s.cats.includes(m.cat)).map(s=>s.name)))];
  modal('Подготовка запросов поставщикам','<div class="notice warn">Почтовый аккаунт ещё не подключён. Сейчас можно проверить содержание писем, но отправка отключена.</div><p style="font-size:11px"><b>Будут подготовлены запросы для '+vendors.length+' поставщиков:</b></p><div class="suppliermeta">'+vendors.map(eh).join('<br>')+'</div><hr style="border:0;border-top:1px solid var(--line);margin:14px 0"><b style="font-size:11px">Текст письма</b><div class="notice" style="margin-top:8px">Добрый день! Просим предоставить коммерческое предложение на следующие позиции:<br>'+items.map(m=>'• '+eh(m.name)+' — '+eh(m.spec)).join('<br>')+'<br><br>Просим указать цену, наличие, срок поставки, стоимость доставки, НДС и условия оплаты.</div><div class="modalfoot"><button class="btn" onclick="closeModal()">Закрыть</button><button class="btn primary" onclick="closeModal();toast(\'Черновики подготовлены. Отправка появится после подключения почты.\')">Понятно</button></div>',()=>true);
 }
+
+async function renderUploadedDocuments(prefetched){
+ const el=$('uploadedDocs');if(!el)return;
+ const company=window.snabproGetCompany?.(),client=window.snabproClient;
+ if(!company||!client){el.innerHTML='<div class="empty">Войдите и выберите предприятие, чтобы видеть загруженные КП.</div>';return;}
+ let docs=prefetched;
+ if(!docs){const {data,error}=await client.from('quote_documents').select('id,original_filename,extraction_status,created_at').eq('company_id',company.id).order('created_at',{ascending:false});if(error){el.innerHTML='<div class="empty">Не удалось загрузить список документов.</div>';return;}docs=data||[];}
+ const labels={uploaded:'Загружен · ожидает AI-обработки',processing:'Обрабатывается',review:'Нужна проверка',approved:'Проверен',failed:'Ошибка обработки'};
+ el.innerHTML=docs.length?docs.map(d=>'<div class="activity"><span class="dot"></span><div><b>'+eh(d.original_filename)+'</b><small>'+eh(labels[d.extraction_status]||d.extraction_status)+' · '+new Date(d.created_at).toLocaleString('ru-RU')+'</small></div></div>').join(''):'<div class="empty">Пока нет загруженных коммерческих предложений.</div>';
+}
+
 async function importQuoteFile(){
  const f=$('quoteFile')?.files?.[0];if(!f){toast('Выберите файл');return}
  const ext=f.name.split('.').pop().toLowerCase();
@@ -124,7 +135,7 @@ async function importQuoteFile(){
    });
    if(rowError){await client.storage.from('quote-documents').remove([path]);throw rowError;}
    toast('Документ безопасно сохранён в закрытом хранилище предприятия. AI-распознавание подключим следующим серверным этапом.');
-   $('quoteFile').value='';
+   $('quoteFile').value='';await renderUploadedDocuments();
   }catch(e){toast('Не удалось загрузить документ: '+(e.message||'ошибка доступа'))}
   return;
  }
@@ -151,20 +162,25 @@ window.snabproLoadWorkspace=async function(company){
   const [m,s,p]=await Promise.all([
    client.from('materials').select('*').eq('company_id',company.id).order('created_at',{ascending:true}),
    client.from('suppliers').select('*').eq('company_id',company.id).order('created_at',{ascending:true}),
-   client.from('purchase_requests').select('*').eq('company_id',company.id).order('created_at',{ascending:false})
+   client.from('purchase_requests').select('*').eq('company_id',company.id).order('created_at',{ascending:false}),
+   client.from('quote_documents').select('id,original_filename,extraction_status,created_at').eq('company_id',company.id).order('created_at',{ascending:false})
   ]);
   if(m.error)throw m.error;if(s.error)throw s.error;if(p.error)throw p.error;
   materials=(m.data||[]).map((x,i)=>({id:i+1,dbId:x.id,name:x.name,cat:x.category||'Без категории',spec:x.specification?.text||'',unit:x.unit||'шт.',price:x.last_price==null?'—':money(x.last_price),sup:0}));
   suppliers=(s.data||[]).map((x,i)=>({id:i+1,dbId:x.id,name:x.name,email:x.email||'',contact:x.contact||x.phone||'',region:x.region||'',cats:x.categories||[],rating:x.rating||'—',lead:x.lead_time||'Не указан'}));
   purchases=(p.data||[]).map((x,i)=>({id:i+1,dbId:x.id,name:x.title,items:x.details?.items||'',vendors:x.details?.vendors||0,replies:x.details?.replies||0,status:x.status==='completed'?'Завершена':x.status==='cancelled'?'Отменена':'Ожидаем ответы',date:x.details?.date||new Date(x.created_at).toLocaleDateString('ru-RU')}));
+  materials.forEach(m=>m.sup=suppliers.filter(v=>v.cats.includes(m.cat)).length);
+  quoteOffers=[];localStorage.setItem('sp_quotes','[]');
   window.snabproWorkspaceReady=true;
-  save();renderAll();
+  save();renderAll();await renderUploadedDocuments(d.data||[]);
   toast('Загружены данные предприятия «'+company.name+'».');
  }catch(e){window.snabproWorkspaceReady=false;toast('Не удалось загрузить данные предприятия: '+(e.message||'ошибка'));}
 };
 window.snabproResetWorkspace=function(){
  window.snabproWorkspaceReady=false;
  materials=JSON.parse(JSON.stringify(dm));suppliers=JSON.parse(JSON.stringify(ds));purchases=JSON.parse(JSON.stringify(dp));
+ if(typeof demoQuotes!=='undefined'){quoteOffers=JSON.parse(JSON.stringify(demoQuotes));localStorage.setItem('sp_quotes',JSON.stringify(quoteOffers));}
+ renderUploadedDocuments([]);
  localStorage.setItem('sp_materials',JSON.stringify(materials));localStorage.setItem('sp_suppliers',JSON.stringify(suppliers));localStorage.setItem('sp_purchases',JSON.stringify(purchases));
  renderAll();
 };
