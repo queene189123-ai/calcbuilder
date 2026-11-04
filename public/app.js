@@ -4,7 +4,46 @@ const ds=[{id:1,name:'МеталлСнаб Север',contact:'Иван · +7 9
 const dp=[{id:1,name:'Нержавейка AISI 304 · ноябрь',items:'Нержавеющая сталь · 100 листов',vendors:3,replies:2,status:'Сравнение предложений',date:'03.11.2026'},{id:2,name:'Трубы для партии бойлеров',items:'Труба 25 мм · 300 м; труба 50 мм · 200 м',vendors:3,replies:1,status:'Ожидаем ответы',date:'02.11.2026'}];
 function get(k,d){try{return JSON.parse(localStorage.getItem(k))||JSON.parse(JSON.stringify(d))}catch(e){return JSON.parse(JSON.stringify(d))}}
 let materials=get('sp_materials',dm),suppliers=get('sp_suppliers',ds),purchases=get('sp_purchases',dp);
-function save(){localStorage.setItem('sp_materials',JSON.stringify(materials));localStorage.setItem('sp_suppliers',JSON.stringify(suppliers));localStorage.setItem('sp_purchases',JSON.stringify(purchases))}
+let workspaceSyncTimer=null;
+function save(){
+ localStorage.setItem('sp_materials',JSON.stringify(materials));
+ localStorage.setItem('sp_suppliers',JSON.stringify(suppliers));
+ localStorage.setItem('sp_purchases',JSON.stringify(purchases));
+ if(window.snabproWorkspaceReady){
+  clearTimeout(workspaceSyncTimer);
+  workspaceSyncTimer=setTimeout(()=>syncWorkspace().catch(e=>toast('Ошибка сохранения в рабочее пространство: '+(e.message||'ошибка'))),500);
+ }
+}
+async function syncWorkspace(){
+ const client=window.snabproClient,company=window.snabproGetCompany?.();
+ if(!client||!company||!window.snabproWorkspaceReady)return;
+ const {data:{user},error:userError}=await client.auth.getUser();
+ if(userError||!user)throw new Error('Сессия не найдена');
+ for(const m of materials){
+  const price=String(m.price??'').replace(/[^0-9,.-]/g,'').replace(',','.');
+  const row={company_id:company.id,name:m.name,category:m.cat||null,specification:{text:m.spec||''},unit:m.unit||'шт.',last_price:price&&Number.isFinite(Number(price))?Number(price):null,created_by:user.id};
+  if(m.dbId)row.id=m.dbId;
+  const {data,error}=await client.from('materials').upsert(row).select('id').single();
+  if(error)throw error;m.dbId=data.id;
+ }
+ for(const v of suppliers){
+  const row={company_id:company.id,name:v.name,email:v.email||null,phone:null,contact:v.contact||null,categories:v.cats||[],region:v.region||null,notes:null,rating:v.rating||null,lead_time:v.lead||null};
+  if(v.dbId)row.id=v.dbId;
+  const {data,error}=await client.from('suppliers').upsert(row).select('id').single();
+  if(error)throw error;v.dbId=data.id;
+ }
+ for(const p of purchases){
+  const status=p.status==='Завершена'?'completed':p.status==='Отменена'?'cancelled':'collecting';
+  const row={company_id:company.id,title:p.name,status,created_by:user.id,details:{items:p.items||'',vendors:p.vendors||0,replies:p.replies||0,date:p.date||''}};
+  if(p.dbId)row.id=p.dbId;
+  const {data,error}=await client.from('purchase_requests').upsert(row).select('id').single();
+  if(error)throw error;p.dbId=data.id;
+ }
+ localStorage.setItem('sp_materials',JSON.stringify(materials));
+ localStorage.setItem('sp_suppliers',JSON.stringify(suppliers));
+ localStorage.setItem('sp_purchases',JSON.stringify(purchases));
+}
+
 function toast(t){$('toast').textContent=t;$('toast').style.display='block';clearTimeout(window.tt);window.tt=setTimeout(()=>$('toast').style.display='none',3500)}
 function go(p){document.querySelectorAll('.section').forEach(x=>x.classList.toggle('active',x.id===p));document.querySelectorAll('.nav button[data-page]').forEach(x=>x.classList.toggle('active',x.dataset.page===p));$('crumb').textContent=({dashboard:'Обзор',materials:'Мои материалы',suppliers:'Поставщики',purchases:'Закупки',quotes:'КП и сравнение',market:'Поиск поставщиков',saving:'Оптимизация расходов',report:'Отчёт руководителю',history:'История цен'})[p];renderAll();window.scrollTo(0,0)}
 document.querySelectorAll('.nav button[data-page]').forEach(b=>b.onclick=()=>go(b.dataset.page));
@@ -103,3 +142,30 @@ function buildManagementReport(){
  if($('reportSaving'))$('reportSaving').textContent=money(total);if($('reportOffers'))$('reportOffers').textContent=all.length;if($('reportRisks'))$('reportRisks').textContent=items.filter(x=>x.best.lead>5).length;
 }
 init();
+
+window.snabproWorkspaceReady=false;
+window.snabproLoadWorkspace=async function(company){
+ const client=window.snabproClient;if(!client||!company)return;
+ window.snabproWorkspaceReady=false;
+ try{
+  const [m,s,p]=await Promise.all([
+   client.from('materials').select('*').eq('company_id',company.id).order('created_at',{ascending:true}),
+   client.from('suppliers').select('*').eq('company_id',company.id).order('created_at',{ascending:true}),
+   client.from('purchase_requests').select('*').eq('company_id',company.id).order('created_at',{ascending:false})
+  ]);
+  if(m.error)throw m.error;if(s.error)throw s.error;if(p.error)throw p.error;
+  materials=(m.data||[]).map((x,i)=>({id:i+1,dbId:x.id,name:x.name,cat:x.category||'Без категории',spec:x.specification?.text||'',unit:x.unit||'шт.',price:x.last_price==null?'—':money(x.last_price),sup:0}));
+  suppliers=(s.data||[]).map((x,i)=>({id:i+1,dbId:x.id,name:x.name,email:x.email||'',contact:x.contact||x.phone||'',region:x.region||'',cats:x.categories||[],rating:x.rating||'—',lead:x.lead_time||'Не указан'}));
+  purchases=(p.data||[]).map((x,i)=>({id:i+1,dbId:x.id,name:x.title,items:x.details?.items||'',vendors:x.details?.vendors||0,replies:x.details?.replies||0,status:x.status==='completed'?'Завершена':x.status==='cancelled'?'Отменена':'Ожидаем ответы',date:x.details?.date||new Date(x.created_at).toLocaleDateString('ru-RU')}));
+  window.snabproWorkspaceReady=true;
+  save();renderAll();
+  toast('Загружены данные предприятия «'+company.name+'».');
+ }catch(e){window.snabproWorkspaceReady=false;toast('Не удалось загрузить данные предприятия: '+(e.message||'ошибка'));}
+};
+window.snabproResetWorkspace=function(){
+ window.snabproWorkspaceReady=false;
+ materials=JSON.parse(JSON.stringify(dm));suppliers=JSON.parse(JSON.stringify(ds));purchases=JSON.parse(JSON.stringify(dp));
+ localStorage.setItem('sp_materials',JSON.stringify(materials));localStorage.setItem('sp_suppliers',JSON.stringify(suppliers));localStorage.setItem('sp_purchases',JSON.stringify(purchases));
+ renderAll();
+};
+
