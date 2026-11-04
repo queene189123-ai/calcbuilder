@@ -159,13 +159,13 @@ window.snabproLoadWorkspace=async function(company){
  const client=window.snabproClient;if(!client||!company)return;
  window.snabproWorkspaceReady=false;
  try{
-  const [m,s,p]=await Promise.all([
+  const [m,s,p,d]=await Promise.all([
    client.from('materials').select('*').eq('company_id',company.id).order('created_at',{ascending:true}),
    client.from('suppliers').select('*').eq('company_id',company.id).order('created_at',{ascending:true}),
    client.from('purchase_requests').select('*').eq('company_id',company.id).order('created_at',{ascending:false}),
    client.from('quote_documents').select('id,original_filename,extraction_status,created_at').eq('company_id',company.id).order('created_at',{ascending:false})
   ]);
-  if(m.error)throw m.error;if(s.error)throw s.error;if(p.error)throw p.error;
+  if(m.error)throw m.error;if(s.error)throw s.error;if(p.error)throw p.error;if(d.error)throw d.error;
   materials=(m.data||[]).map((x,i)=>({id:i+1,dbId:x.id,name:x.name,cat:x.category||'Без категории',spec:x.specification?.text||'',unit:x.unit||'шт.',price:x.last_price==null?'—':money(x.last_price),sup:0}));
   suppliers=(s.data||[]).map((x,i)=>({id:i+1,dbId:x.id,name:x.name,email:x.email||'',contact:x.contact||x.phone||'',region:x.region||'',cats:x.categories||[],rating:x.rating||'—',lead:x.lead_time||'Не указан'}));
   purchases=(p.data||[]).map((x,i)=>({id:i+1,dbId:x.id,name:x.title,items:x.details?.items||'',vendors:x.details?.vendors||0,replies:x.details?.replies||0,status:x.status==='completed'?'Завершена':x.status==='cancelled'?'Отменена':'Ожидаем ответы',date:x.details?.date||new Date(x.created_at).toLocaleDateString('ru-RU')}));
