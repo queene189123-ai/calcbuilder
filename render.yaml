@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: calcbuilder-demo
+    runtime: static
+    buildCommand: echo "No build step required"
+    staticPublishPath: ./public
+    headers:
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
