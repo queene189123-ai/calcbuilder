@@ -186,16 +186,18 @@ function syncQuoteMaterialOptions(preferFirst=false){
 }
 async function loadCompanyQuotes(company){
  const client=window.snabproClient;if(!client||!company?.id)return;
- const [q,qi,ri,sr]=await Promise.all([
+ const [q,qi,ri,sr,pr]=await Promise.all([
   client.from('supplier_quotes').select('*').eq('company_id',company.id).order('created_at',{ascending:false}),
   client.from('quote_items').select('*').eq('company_id',company.id).order('created_at',{ascending:false}),
-  client.from('purchase_request_items').select('id,description,specification,quantity,unit').eq('company_id',company.id),
-  client.from('suppliers').select('id,name').eq('company_id',company.id)
+  client.from('purchase_request_items').select('id,request_id,description,specification,quantity,unit').eq('company_id',company.id),
+  client.from('suppliers').select('id,name').eq('company_id',company.id),
+  client.from('purchase_requests').select('id,title').eq('company_id',company.id)
  ]);
- if(q.error)throw q.error;if(qi.error)throw qi.error;if(ri.error)throw ri.error;if(sr.error)throw sr.error;
+ if(q.error)throw q.error;if(qi.error)throw qi.error;if(ri.error)throw ri.error;if(sr.error)throw sr.error;if(pr.error)throw pr.error;
  const quoteById=new Map((q.data||[]).map(x=>[x.id,x]));
  const itemById=new Map((ri.data||[]).map(x=>[x.id,x]));
  const supplierById=new Map((sr.data||[]).map(x=>[x.id,x]));
+ const requestById=new Map((pr.data||[]).map(x=>[x.id,x]));
  // Общая доставка распределяется между строками КП пропорционально стоимости товаров.
  // Распределяем копейки методом наибольших остатков, чтобы сумма долей точно совпадала с доставкой в КП.
  const itemsByQuote=new Map();
@@ -226,7 +228,9 @@ async function loadCompanyQuotes(company){
   // Для привязанных строк используем каноническое наименование из заявки:
   // поставщики могут описывать один и тот же материал разными словами.
   const spec=requestItem?.specification?.text||item.specification?.text||'';
-  const material=String(requestItem?.description||item.description||'Позиция закупки')+(spec?' · '+spec:'');
+  const baseMaterial=String(requestItem?.description||item.description||'Позиция закупки')+(spec?' · '+spec:'');
+  const requestTitle=requestById.get(requestItem?.request_id||quote.request_id)?.title;
+  const material=baseMaterial+(requestTitle?' — заявка: '+requestTitle:'');
   const supplier=supplierById.get(quote.supplier_id);
   const qty=Number(item.quantity??requestItem?.quantity)||1;
   const deliveryShare=deliveryByItemId.get(item.id)||0;
