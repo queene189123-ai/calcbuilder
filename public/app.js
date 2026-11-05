@@ -149,6 +149,7 @@ function normalizeDrafts(list){
 }
 emailDrafts=normalizeDrafts(emailDrafts);
 localStorage.setItem('sp_email_drafts',JSON.stringify(emailDrafts));
+window.snabproMarkDraftSent=draftId=>{const d=emailDrafts.find(x=>x.id===draftId);if(d)d.status='Отправлено';localStorage.setItem('sp_email_drafts',JSON.stringify(emailDrafts));};
 const money=n=>new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(Math.round(n))+' ₽';
 function quotesForSelected(){let m=$('quoteMaterial')?.value||'Труба нержавеющая Ø25 мм';return quoteOffers.filter(q=>q.material===m)}
 function renderQuotes(){
