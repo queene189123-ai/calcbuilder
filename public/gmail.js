@@ -140,6 +140,19 @@
   document.addEventListener("DOMContentLoaded",()=>{
     $("gmailConnect")?.addEventListener("click",connect);
     $("gmailInbox")?.addEventListener("click",inbox);
+    $("gmailInboxList")?.addEventListener("click",async function(ev){
+      const button=ev.target.closest("[data-save-quote]");
+      if(!button)return;
+      const card=button.closest("article");
+      const price=Number(card.querySelector("[data-q-price]")?.value);
+      if(!price||price<=0){showToast?.("Укажи цену");return;}
+      button.disabled=true;
+      try{
+        await call("save_quote",{messageId:button.dataset.saveQuote,requestItemId:card.querySelector("[data-q-item]").value,unitPrice:price,currency:"RUB",deliveryCost:card.querySelector("[data-q-delivery]").value,leadTimeDays:card.querySelector("[data-q-lead]").value});
+        button.textContent="Сохранено";button.style.background="#18845b";
+        showToast?.("КП добавлено в сравнение");
+      }catch(error){button.disabled=false;button.textContent="Сохранить в сравнение КП";showToast?.(error.message);}
+    });
     $("gmailSend")?.addEventListener("click",sendMail);
     $("gmailSupplierTemplate")?.addEventListener("click",insertSupplierRequest);
     $("accountBtn")?.addEventListener("click",()=>setTimeout(status,250));
