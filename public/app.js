@@ -126,6 +126,29 @@ const demoQuotes=[
 ];
 let quoteOffers=get('sp_quotes',demoQuotes);
 let emailDrafts=get('sp_email_drafts',[]);
+function normalizeDrafts(list){
+ const groups=new Map();
+ for(const d of list){
+  const key=String(d.batchId||'')+'|'+(String(d.to||'').trim().toLowerCase()||'supplier:'+String(d.supplierLocalId||d.id));
+  if(!groups.has(key)){groups.set(key,{...d,items:[...(d.items||[])],supplierNames:[d.supplier].filter(Boolean),supplierIds:d.supplierLocalId?[d.supplierLocalId]:[]});continue;}
+  const g=groups.get(key);
+  (d.items||[]).forEach(x=>{if(!g.items.some(y=>y.id===x.id))g.items.push(x);});
+  if(d.supplier&&!g.supplierNames.includes(d.supplier))g.supplierNames.push(d.supplier);
+  if(d.supplierLocalId&&!g.supplierIds.includes(d.supplierLocalId))g.supplierIds.push(d.supplierLocalId);
+  if(d.status!=='Отправлено')g.status='Черновик';
+ }
+ for(const g of groups.values()){
+  g.supplier=g.supplierNames.join(' / ');
+  g.supplierLocalId=g.supplierIds.length===1?g.supplierIds[0]:null;
+  const marker='\n\nПросим указать:',tail=String(g.body||'');
+  const suffix=tail.includes(marker)?tail.slice(tail.indexOf(marker)):'';
+  g.body='Добрый день!\n\nПросим подготовить коммерческое предложение на следующие позиции:\n\n'+g.items.map(x=>'• '+x.name+' — '+x.spec+'; количество: '+x.qty+' '+x.unit).join('\n')+suffix;
+  delete g.supplierNames;delete g.supplierIds;
+ }
+ return [...groups.values()];
+}
+emailDrafts=normalizeDrafts(emailDrafts);
+localStorage.setItem('sp_email_drafts',JSON.stringify(emailDrafts));
 const money=n=>new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(Math.round(n))+' ₽';
 function quotesForSelected(){let m=$('quoteMaterial')?.value||'Труба нержавеющая Ø25 мм';return quoteOffers.filter(q=>q.material===m)}
 function renderQuotes(){
@@ -228,16 +251,19 @@ window.snabproLoadWorkspace=async function(company){
  const client=window.snabproClient;if(!client||!company)return;
  window.snabproWorkspaceReady=false;
  try{
-  const [m,s,p,d]=await Promise.all([
+  const [m,s,p,d,links]=await Promise.all([
    client.from('materials').select('*').eq('company_id',company.id).order('created_at',{ascending:true}),
    client.from('suppliers').select('*').eq('company_id',company.id).order('created_at',{ascending:true}),
    client.from('purchase_requests').select('*').eq('company_id',company.id).order('created_at',{ascending:false}),
-   client.from('quote_documents').select('id,original_filename,extraction_status,created_at').eq('company_id',company.id).order('created_at',{ascending:false})
+   client.from('quote_documents').select('id,original_filename,extraction_status,created_at').eq('company_id',company.id).order('created_at',{ascending:false}),
+   client.from('purchase_request_suppliers').select('request_id,status').eq('company_id',company.id)
   ]);
-  if(m.error)throw m.error;if(s.error)throw s.error;if(p.error)throw p.error;if(d.error)throw d.error;
+  if(m.error)throw m.error;if(s.error)throw s.error;if(p.error)throw p.error;if(d.error)throw d.error;if(links.error)throw links.error;
+  const linkStatuses=new Map();
+  (links.data||[]).forEach(link=>{const a=linkStatuses.get(link.request_id)||[];a.push(link.status);linkStatuses.set(link.request_id,a);});
   materials=(m.data||[]).map((x,i)=>({id:i+1,dbId:x.id,name:x.name,cat:x.category||'Без категории',spec:x.specification?.text||'',unit:x.unit||'шт.',price:x.last_price==null?'—':money(x.last_price),sup:0}));
   suppliers=(s.data||[]).map((x,i)=>({id:i+1,dbId:x.id,name:x.name,email:x.email||'',contact:x.contact||x.phone||'',region:x.region||'',cats:x.categories||[],rating:x.rating||'—',lead:x.lead_time||'Не указан'}));
-  purchases=(p.data||[]).map((x,i)=>({id:i+1,dbId:x.id,name:x.title,items:x.details?.items||'',vendors:x.details?.vendors||0,replies:x.details?.replies||0,status:x.status==='completed'?'Завершена':x.status==='cancelled'?'Отменена':'Ожидаем ответы',date:x.details?.date||new Date(x.created_at).toLocaleDateString('ru-RU')}));
+  purchases=(p.data||[]).map((x,i)=>({id:i+1,dbId:x.id,name:x.title,items:x.details?.items||'',vendors:x.details?.vendors||0,replies:x.details?.replies||0,status:x.status==='completed'?'Завершена':x.status==='cancelled'?'Отменена':(linkStatuses.get(x.id)?.length&&linkStatuses.get(x.id).every(v=>v==='sent')?'Ожидаем ответы':'Черновики готовы'),date:x.details?.date||new Date(x.created_at).toLocaleDateString('ru-RU')}));
   materials.forEach(m=>m.sup=suppliers.filter(v=>v.cats.includes(m.cat)).length);
   quoteOffers=[];localStorage.setItem('sp_quotes','[]');
   window.snabproWorkspaceReady=true;
