@@ -41,6 +41,7 @@
     const prices=(x.price_candidates||[]).map(p=>e(p.amount)+" "+e(p.currency)).join(", ")||"Не распознана";
     const attachments=(m.attachments||[]).map(a=>e(a.filename)).join(", ");
     const supplier=m.supplierName ? "Поставщик: "+e(m.supplierName) : "Поставщик не сопоставлен — проверьте email в карточке поставщика";
+    const request=m.requestTitle ? "Заявка: "+e(m.requestTitle) : "";
     const fields=[
       ["Цена",prices],["Срок поставки",x.lead_time_days!=null?e(x.lead_time_days)+" дн.":"Не распознан"],
       ["Наличие",e(x.availability||"Не указано")],["НДС",e(x.vat||"Не указано")],
@@ -49,7 +50,7 @@
     return '<article style="border:1px solid #e7ebf2;border-radius:10px;padding:12px;margin:10px 0">'+
       '<div style="font-weight:700">'+e(m.subject||"(без темы)")+'</div>'+
       '<div style="font-size:11px;color:#78849a;margin:4px 0">'+e(m.from||m.fromEmail)+' · '+e(m.date||"")+'</div>'+
-      '<div style="font-size:12px;margin:6px 0">'+supplier+'</div>'+
+      '<div style="font-size:12px;margin:6px 0">'+supplier+'</div>'+(request?'<div style="font-size:11px;color:#245a9b;margin:4px 0">'+request+'</div>':'')+
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12px">'+fields.map(f=>'<div><span style="color:#78849a">'+f[0]+':</span> <b>'+f[1]+'</b></div>').join("")+'</div>'+
       (attachments?'<div style="font-size:11px;margin-top:7px">Вложения: '+attachments+'</div>':"")+
       '<div style="font-size:10px;color:#8a6a2e;margin-top:8px">Предварительное извлечение · требуется проверка</div>'+
@@ -61,8 +62,8 @@
       if(b){b.disabled=true;b.textContent="Синхронизируем…";}
       if(out)out.textContent="Читаем новые письма и сопоставляем отправителей с базой поставщиков…";
       const d=await call("inbox"), items=d.messages||[];
-      const matched=items.filter(m=>m.supplierName).length;
-      out.innerHTML='<div style="font-size:11px;color:#78849a;margin:8px 0">Синхронизировано писем: '+items.length+' · распознано поставщиков: '+matched+'</div>'+
+      const matched=items.filter(m=>m.supplierName).length, linked=items.filter(m=>m.requestId).length;
+      out.innerHTML='<div style="font-size:11px;color:#78849a;margin:8px 0">Синхронизировано писем: '+items.length+' · распознано поставщиков: '+matched+' · привязано к заявкам: '+linked+'</div>'+
         (items.map(renderInboxMessage).join("")||"Новых входящих писем за последние 30 дней не найдено.");
     } catch(e) { if(out)out.textContent=e.message; }
     finally {if(b){b.disabled=false;b.textContent="Проверить входящие";}}
