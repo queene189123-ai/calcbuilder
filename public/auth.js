@@ -133,7 +133,8 @@
     $('authSignup').addEventListener('click',()=>{ $('authMode').textContent='Регистрация';$('authSubmit').dataset.mode='signup';$('authSignup').classList.add('active');$('authLogin').classList.remove('active');});
     $('authLogin').addEventListener('click',()=>{ $('authMode').textContent='Вход';$('authSubmit').dataset.mode='login';$('authLogin').classList.add('active');$('authSignup').classList.remove('active');});
     $('authSubmit').addEventListener('click',()=>submitAuth($('authSubmit').dataset.mode||'login'));
-    $('companyCreate').addEventListener('click',createCompany);\n    $('companyProfileSave').addEventListener('click',saveCompanyProfile);
+    $('companyCreate').addEventListener('click',createCompany);
+    $('companyProfileSave').addEventListener('click',saveCompanyProfile);
     $('signOutBtn').addEventListener('click',signOut);
     if(client) client.auth.onAuthStateChange(()=>{setTimeout(refresh,0);});
     refresh();
