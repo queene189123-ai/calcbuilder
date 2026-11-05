@@ -174,7 +174,7 @@ function normalizeDrafts(list){
 emailDrafts=normalizeDrafts(emailDrafts);
 localStorage.setItem('sp_email_drafts',JSON.stringify(emailDrafts));
 window.snabproMarkDraftSent=draftId=>{const d=emailDrafts.find(x=>x.id===draftId);if(d)d.status='Отправлено';localStorage.setItem('sp_email_drafts',JSON.stringify(emailDrafts));};
-const money=n=>new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(Math.round(n))+' ₽';
+const money=(n,currency='RUB')=>{const code=['RUB','USD','EUR'].includes(currency)?currency:'RUB';return new Intl.NumberFormat('ru-RU',{style:'currency',currency:code,maximumFractionDigits:code==='RUB'?0:2}).format(Number(n)||0)};
 function quotesForSelected(){let m=$('quoteMaterial')?.value||'Труба нержавеющая Ø25 мм';return quoteOffers.filter(q=>q.material===m)}
 function syncQuoteMaterialOptions(preferFirst=false){
  const select=$('quoteMaterial');if(!select)return;
@@ -236,13 +236,15 @@ async function loadCompanyQuotes(company){
 window.snabproRefreshQuotes=async()=>{const company=window.snabproGetCompany?.();if(!company)throw new Error('Предприятие не выбрано');await loadCompanyQuotes(company);return quoteOffers.length};
 function renderQuotes(){
  const arr=quotesForSelected(),body=$('quotesBody');if(!body)return;
- const sorted=arr.map(q=>({...q,total:q.qty*q.unitPrice+q.delivery})).sort((a,b)=>a.total-b.total),best=sorted[0],worst=sorted[sorted.length-1];
- body.innerHTML=sorted.map((q,i)=>'<tr class="'+(i===0?'bestrow':'')+'"><td>'+eh(q.supplier)+'</td><td>'+money(q.unitPrice)+' / '+eh(q.unit)+'</td><td>'+q.qty+' '+eh(q.unit)+'</td><td>'+money(q.delivery)+'</td><td>'+eh(q.vat)+'</td><td>'+q.lead+' дн.</td><td class="strong">'+money(q.total)+'</td><td><span class="pill '+(i===0?'green':'')+'">'+(i===0?'Самая низкая сумма':eh(q.status))+'</span></td></tr>').join('')||'<tr><td colspan="8" class="empty">Пока нет предложений для этой позиции. Добавьте КП.</td></tr>';
+ const currencies=[...new Set(arr.map(q=>q.currency||'RUB'))],comparable=currencies.length<=1;
+ const sorted=arr.map(q=>({...q,currency:q.currency||'RUB',total:q.qty*q.unitPrice+q.delivery})).sort((a,b)=>a.currency===b.currency?a.total-b.total:a.currency.localeCompare(b.currency));
+ const best=comparable?sorted[0]:null,worst=comparable?sorted[sorted.length-1]:null;
+ body.innerHTML=sorted.map((q,i)=>{const isBest=!!best&&i===0;return '<tr class="'+(isBest?'bestrow':'')+'"><td>'+eh(q.supplier)+'</td><td>'+money(q.unitPrice,q.currency)+' / '+eh(q.unit)+'</td><td>'+q.qty+' '+eh(q.unit)+'</td><td>'+money(q.delivery,q.currency)+'</td><td>'+eh(q.vat)+'</td><td>'+q.lead+' дн.</td><td class="strong">'+money(q.total,q.currency)+'</td><td><span class="pill '+(isBest?'green':'')+'">'+(isBest?'Самая низкая сумма':eh(q.status))+'</span></td></tr>'}).join('')||'<tr><td colspan="8" class="empty">Пока нет предложений для этой позиции. Добавьте КП.</td></tr>';
  $('quoteCount').textContent=quoteOffers.length;
- $('quoteQty').textContent=best?best.qty+' '+best.unit:'—';
- $('quoteBest').textContent=best?money(best.total):'—';
- $('quoteSaving').textContent=best&&worst?money(worst.total-best.total):'—';
- $('quoteVerdict').textContent=best?'Лучшее по полной стоимости: '+best.supplier+' — '+money(best.total)+'. Срок: '+best.lead+' дн. Спецификация: '+best.spec+'. Перед выбором подтвердите наличие, документы и соответствие характеристик.':'Добавьте предложения, чтобы сравнить итоговую стоимость.';
+ $('quoteQty').textContent=best?best.qty+' '+best.unit:currencies.length>1?'Разные валюты':'—';
+ $('quoteBest').textContent=best?money(best.total,best.currency):currencies.length>1?'Нужна единая валюта':'—';
+ $('quoteSaving').textContent=best&&worst?money(worst.total-best.total,best.currency):'—';
+ $('quoteVerdict').textContent=currencies.length>1?'Предложения указаны в разных валютах ('+currencies.join(', ')+'). Их нельзя корректно ранжировать без пересчёта в одну валюту.':best?'Лучшее по полной стоимости: '+best.supplier+' — '+money(best.total,best.currency)+'. Срок: '+best.lead+' дн. Спецификация: '+best.spec+'. Перед выбором подтвердите наличие, документы и соответствие характеристик.':'Добавьте предложения, чтобы сравнить итоговую стоимость.';
  buildManagementReport();
 }
 function openQuoteImport(){
