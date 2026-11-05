@@ -177,15 +177,16 @@ function syncQuoteMaterialOptions(preferFirst=false){
 }
 async function loadCompanyQuotes(company){
  const client=window.snabproClient;if(!client||!company?.id)return;
- const [q,qi,ri]=await Promise.all([
+ const [q,qi,ri,sr]=await Promise.all([
   client.from('supplier_quotes').select('*').eq('company_id',company.id).order('created_at',{ascending:false}),
   client.from('quote_items').select('*').eq('company_id',company.id).order('created_at',{ascending:false}),
-  client.from('purchase_request_items').select('id,description,specification,quantity,unit').eq('company_id',company.id)
+  client.from('purchase_request_items').select('id,description,specification,quantity,unit').eq('company_id',company.id),
+  client.from('suppliers').select('id,name').eq('company_id',company.id)
  ]);
- if(q.error)throw q.error;if(qi.error)throw qi.error;if(ri.error)throw ri.error;
+ if(q.error)throw q.error;if(qi.error)throw qi.error;if(ri.error)throw ri.error;if(sr.error)throw sr.error;
  const quoteById=new Map((q.data||[]).map(x=>[x.id,x]));
  const itemById=new Map((ri.data||[]).map(x=>[x.id,x]));
- const supplierById=new Map(suppliers.filter(x=>x.dbId).map(x=>[x.dbId,x]));
+ const supplierById=new Map((sr.data||[]).map(x=>[x.id,x]));
  quoteOffers=(qi.data||[]).flatMap(item=>{
   const quote=quoteById.get(item.quote_id);if(!quote)return [];
   const requestItem=item.request_item_id?itemById.get(item.request_item_id):null;
