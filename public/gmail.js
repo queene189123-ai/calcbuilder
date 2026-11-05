@@ -42,6 +42,7 @@
     const attachments=(m.attachments||[]).map(a=>e(a.filename)).join(", ");
     const supplier=m.supplierName ? "Поставщик: "+e(m.supplierName) : "Поставщик не сопоставлен — проверьте email в карточке поставщика";
     const request=m.requestTitle ? "Заявка: "+e(m.requestTitle) : "";
+    const reviewLabel=m.requestId ? "Связано с закупкой · нужна проверка" : m.supplierName ? "Поставщик найден · нужна проверка" : "Не сопоставлено с поставщиком";
     const fields=[
       ["Цена",prices],["Срок поставки",x.lead_time_days!=null?e(x.lead_time_days)+" дн.":"Не распознан"],
       ["Наличие",e(x.availability||"Не указано")],["НДС",e(x.vat||"Не указано")],
@@ -50,7 +51,8 @@
     return '<article style="border:1px solid #e7ebf2;border-radius:10px;padding:12px;margin:10px 0">'+
       '<div style="font-weight:700">'+e(m.subject||"(без темы)")+'</div>'+
       '<div style="font-size:11px;color:#78849a;margin:4px 0">'+e(m.from||m.fromEmail)+' · '+e(m.date||"")+'</div>'+
-      '<div style="font-size:12px;margin:6px 0">'+supplier+'</div>'+(request?'<div style="font-size:11px;color:#245a9b;margin:4px 0">'+request+'</div>':'')+
+      '<div style="font-size:12px;margin:6px 0">'+supplier+'</div>'+
+      '<div style="font-size:11px;color:#8a6a2e;margin:4px 0">'+e(reviewLabel)+'</div>'+(request?'<div style="font-size:11px;color:#245a9b;margin:4px 0">'+request+'</div>':'')+
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12px">'+fields.map(f=>'<div><span style="color:#78849a">'+f[0]+':</span> <b>'+f[1]+'</b></div>').join("")+'</div>'+
       (attachments?'<div style="font-size:11px;margin-top:7px">Вложения: '+attachments+'</div>':"")+
       '<div style="font-size:10px;color:#8a6a2e;margin-top:8px">Предварительное извлечение · требуется проверка</div>'+
