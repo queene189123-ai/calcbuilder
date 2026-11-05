@@ -102,7 +102,7 @@
       c.name||"Отдел закупок"
     ].filter(Boolean);
     $("gmailSubject").value="Запрос коммерческого предложения";
-    $("gmailText").value=lines.join("\\n");
+    $("gmailText").value=lines.join("\n");
     $("gmailSendStatus").textContent= c.address ? "Шаблон заполнен реквизитами предприятия. Добавьте позиции и проверьте адрес доставки." : "Внимание: адрес доставки не заполнен. Укажите его в карточке предприятия перед отправкой.";
   }
   async function sendMail() {

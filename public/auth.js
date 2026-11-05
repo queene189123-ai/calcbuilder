@@ -71,7 +71,7 @@
       delivery_notes:$('companyDeliveryNotes').value.trim()||null,
       updated_at:new Date().toISOString()
     };
-    if(payload.email&&!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(payload.email)){note('Проверьте email предприятия.',true);return;}
+    if(payload.email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.email)){note('Проверьте email предприятия.',true);return;}
     try{
       if(b){b.disabled=true;b.textContent='Сохраняем…';}
       const {data,error}=await client.from('companies').update(payload).eq('id',activeCompany.id).select('id,name,contact_person,phone,email,address,inn,delivery_notes').single();
