@@ -223,8 +223,10 @@ async function loadCompanyQuotes(company){
  quoteOffers=(qi.data||[]).flatMap(item=>{
   const quote=quoteById.get(item.quote_id);if(!quote)return [];
   const requestItem=item.request_item_id?itemById.get(item.request_item_id):null;
-  const spec=item.specification?.text||requestItem?.specification?.text||'';
-  const material=String(item.description||requestItem?.description||'Позиция закупки')+(spec?' · '+spec:'');
+  // Для привязанных строк используем каноническое наименование из заявки:
+  // поставщики могут описывать один и тот же материал разными словами.
+  const spec=requestItem?.specification?.text||item.specification?.text||'';
+  const material=String(requestItem?.description||item.description||'Позиция закупки')+(spec?' · '+spec:'');
   const supplier=supplierById.get(quote.supplier_id);
   const qty=Number(item.quantity??requestItem?.quantity)||1;
   const deliveryShare=deliveryByItemId.get(item.id)||0;
