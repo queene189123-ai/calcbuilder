@@ -49,7 +49,7 @@
     const b=$("gmailSend"), out=$("gmailSendStatus");
     const to=$("gmailTo")?.value.trim(), subject=$("gmailSubject")?.value.trim(), textBody=$("gmailText")?.value.trim();
     if(!to || !textBody){if(out)out.textContent="Укажи адрес получателя и текст письма.";return;}
-    if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(to)){if(out)out.textContent="Проверь адрес электронной почты.";return;}
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)){if(out)out.textContent="Проверь адрес электронной почты.";return;}
     if(!confirm("Отправить письмо на "+to+"?")) return;
     try {
       if(b){b.disabled=true;b.textContent="Отправляем…";}
@@ -63,7 +63,8 @@
   function escapeHtml(s){return String(s||"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
   document.addEventListener("DOMContentLoaded",()=>{
     $("gmailConnect")?.addEventListener("click",connect);
-    $("gmailInbox")?.addEventListener("click",inbox);\n    $("gmailSend")?.addEventListener("click",sendMail);
+    $("gmailInbox")?.addEventListener("click",inbox);
+    $("gmailSend")?.addEventListener("click",sendMail);
     $("accountBtn")?.addEventListener("click",()=>setTimeout(status,250));
     const params=new URLSearchParams(location.search);
     if(params.get("gmail")==="connected"){history.replaceState({}, "", location.pathname);setTimeout(()=>{status();if(typeof showToast==="function")showToast("Gmail успешно подключён.");},500);}
