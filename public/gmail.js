@@ -45,10 +45,25 @@
     } catch(e) { out.textContent=e.message; }
     finally {if(b){b.disabled=false;b.textContent="Проверить входящие";}}
   }
+  async function sendMail() {
+    const b=$("gmailSend"), out=$("gmailSendStatus");
+    const to=$("gmailTo")?.value.trim(), subject=$("gmailSubject")?.value.trim(), textBody=$("gmailText")?.value.trim();
+    if(!to || !textBody){if(out)out.textContent="Укажи адрес получателя и текст письма.";return;}
+    if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(to)){if(out)out.textContent="Проверь адрес электронной почты.";return;}
+    if(!confirm("Отправить письмо на "+to+"?")) return;
+    try {
+      if(b){b.disabled=true;b.textContent="Отправляем…";}
+      if(out)out.textContent="Связываемся с Gmail…";
+      await call("send",{to,subject:subject||"Запрос коммерческого предложения",text:textBody});
+      if(out)out.textContent="Письмо успешно отправлено на "+to+".";
+      if(typeof showToast==="function")showToast("Письмо отправлено.");
+    } catch(e) { if(out)out.textContent="Не удалось отправить: "+e.message; }
+    finally {if(b){b.disabled=false;b.textContent="Отправить письмо";}}
+  }
   function escapeHtml(s){return String(s||"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
   document.addEventListener("DOMContentLoaded",()=>{
     $("gmailConnect")?.addEventListener("click",connect);
-    $("gmailInbox")?.addEventListener("click",inbox);
+    $("gmailInbox")?.addEventListener("click",inbox);\n    $("gmailSend")?.addEventListener("click",sendMail);
     $("accountBtn")?.addEventListener("click",()=>setTimeout(status,250));
     const params=new URLSearchParams(location.search);
     if(params.get("gmail")==="connected"){history.replaceState({}, "", location.pathname);setTimeout(()=>{status();if(typeof showToast==="function")showToast("Gmail успешно подключён.");},500);}
