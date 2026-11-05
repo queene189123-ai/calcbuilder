@@ -171,7 +171,7 @@ function openQuoteImport(){
  });
 }
 let previewDrafts=[];
-async function composeDraft(i){const d=previewDrafts[i];if(!d){toast('Черновик не найден');return}try{await window.snabproEnsureWorkspaceSaved?.()}catch(e){toast('Не удалось сохранить заявку: '+e.message);return}if(!window.snabproComposeEmail){toast('Почтовый модуль не загружен. Обновите страницу.');return}closeModal();window.snabproComposeEmail(d)}
+async function composeDraft(i){const d=previewDrafts[i];if(!d){toast('Черновик не найден');return}try{await window.snabproEnsureWorkspaceSaved?.()}catch(e){toast('Не удалось сохранить заявку: '+e.message);return}if(!d.requestId&&d.subjectToken){const client=window.snabproClient,company=window.snabproGetCompany?.();if(client&&company){const {data,error}=await client.from('purchase_request_suppliers').select('request_id').eq('company_id',company.id).eq('subject_token',d.subjectToken).maybeSingle();if(error){toast('Не удалось связать письмо с заявкой: '+error.message);return}d.requestId=data?.request_id||null;}}if(!window.snabproComposeEmail){toast('Почтовый модуль не загружен. Обновите страницу.');return}closeModal();window.snabproComposeEmail(d)}
 function showRequestPreview(){
  const batch=emailDrafts.length?emailDrafts[emailDrafts.length-1].batchId:null;
  let drafts=batch?emailDrafts.filter(d=>d.batchId===batch):[];
