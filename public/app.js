@@ -240,7 +240,7 @@ function renderQuotes(){
  const sorted=arr.map(q=>({...q,currency:q.currency||'RUB',total:q.qty*q.unitPrice+q.delivery})).sort((a,b)=>a.currency===b.currency?a.total-b.total:a.currency.localeCompare(b.currency));
  const best=comparable?sorted[0]:null,worst=comparable?sorted[sorted.length-1]:null;
  body.innerHTML=sorted.map((q,i)=>{const isBest=!!best&&i===0;return '<tr class="'+(isBest?'bestrow':'')+'"><td>'+eh(q.supplier)+'</td><td>'+money(q.unitPrice,q.currency)+' / '+eh(q.unit)+'</td><td>'+q.qty+' '+eh(q.unit)+'</td><td>'+money(q.delivery,q.currency)+'</td><td>'+eh(q.vat)+'</td><td>'+q.lead+' дн.</td><td class="strong">'+money(q.total,q.currency)+'</td><td><span class="pill '+(isBest?'green':'')+'">'+(isBest?'Самая низкая сумма':eh(q.status))+'</span></td></tr>'}).join('')||'<tr><td colspan="8" class="empty">Пока нет предложений для этой позиции. Добавьте КП.</td></tr>';
- $('quoteCount').textContent=quoteOffers.length;
+ $('quoteCount').textContent=new Set(quoteOffers.map(q=>q.dbQuoteId||q.id)).size;
  $('quoteQty').textContent=best?best.qty+' '+best.unit:currencies.length>1?'Разные валюты':'—';
  $('quoteBest').textContent=best?money(best.total,best.currency):currencies.length>1?'Нужна единая валюта':'—';
  $('quoteSaving').textContent=best&&worst?money(worst.total-best.total,best.currency):'—';
@@ -432,7 +432,7 @@ async function openDocumentReview(documentId){
   if(createdRequest){
    const localId=Date.now();
    const localItems=rows.map((row,i)=>({id:localId+i,dbId:createdItemIds[i],name:row.description,spec:row.spec,qty:row.quantity,unit:row.unit,cat:'Другое'}));
-   purchases.unshift({id:localId,dbId:requestId,name:createdRequestTitle,items:rows.map(row=>row.description+' · '+row.quantity+' '+row.unit).join('; '),vendors:1,replies:1,status:'КП получено',date:new Date().toLocaleDateString('ru-RU'),requestItems:localItems});
+   purchases.unshift({id:localId,dbId:requestId,name:createdRequestTitle,items:rows.map(row=>row.description+' · '+row.quantity+' '+row.unit).join('; '),vendors:1,replies:1,status:'Сравнение предложений',date:new Date().toLocaleDateString('ru-RU'),requestItems:localItems});
    save();renderPurchases();renderDashboard();
   }
   closeModal();await window.snabproRefreshQuotes?.();await renderUploadedDocuments();
@@ -440,10 +440,11 @@ async function openDocumentReview(documentId){
  }); 
 }
 function buildManagementReport(){
- const all=quoteOffers,by={};all.forEach(q=>{(by[q.material]??=[]).push({...q,total:q.qty*q.unitPrice+q.delivery})});
- const items=Object.entries(by).map(([m,a])=>{a.sort((x,y)=>x.total-y.total);return {m,best:a[0],worst:a[a.length-1],saving:a[a.length-1].total-a[0].total}});
- const total=items.reduce((s,x)=>s+x.saving,0),el=$('managementReport');if(el)el.innerHTML=items.map(x=>'<div class="recommend"><div><h4>'+eh(x.m)+'</h4><p>Лучшее предложение: '+eh(x.best.supplier)+' · '+money(x.best.total)+' с доставкой. Срок '+x.best.lead+' дн. Проверьте соответствие спецификации и наличие.</p></div><div class="saving">'+money(x.saving)+'</div></div>').join('')||'<div class="empty">Добавьте коммерческие предложения для анализа.</div>';
- if($('reportSaving'))$('reportSaving').textContent=money(total);if($('reportOffers'))$('reportOffers').textContent=all.length;if($('reportRisks'))$('reportRisks').textContent=items.filter(x=>x.best.lead>5).length;
+ const all=quoteOffers,by={};all.forEach(q=>{const currency=q.currency||'RUB',key=q.material+'||'+currency;(by[key]??=[]).push({...q,currency,total:q.qty*q.unitPrice+q.delivery})});
+ const items=Object.values(by).map(a=>{a.sort((x,y)=>x.total-y.total);return {m:a[0].material,currency:a[0].currency,best:a[0],worst:a[a.length-1],saving:a[a.length-1].total-a[0].total}});
+ const currencies=[...new Set(items.map(x=>x.currency))],total=currencies.length<=1?items.reduce((s,x)=>s+x.saving,0):null,el=$('managementReport');
+ if(el)el.innerHTML=items.map(x=>'<div class="recommend"><div><h4>'+eh(x.m)+'</h4><p>Лучшее предложение: '+eh(x.best.supplier)+' · '+money(x.best.total,x.currency)+' с доставкой. Срок '+x.best.lead+' дн. Проверьте соответствие спецификации и наличие.</p></div><div class="saving">'+money(x.saving,x.currency)+'</div></div>').join('')||'<div class="empty">Добавьте коммерческие предложения для анализа.</div>';
+ if($('reportSaving'))$('reportSaving').textContent=total===null?'—':money(total,currencies[0]||'RUB');if($('reportOffers'))$('reportOffers').textContent=new Set(all.map(q=>q.dbQuoteId||q.id)).size;if($('reportRisks'))$('reportRisks').textContent=items.filter(x=>x.best.lead>5).length;
 }
 init();
 
