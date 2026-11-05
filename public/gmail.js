@@ -21,7 +21,7 @@
     const client=window.snabproClient;
     const {data:{session}}=await client.auth.getSession();
     if(!session)throw new Error("Сначала войдите в СнабПро.");
-    const response=await fetch("https://tdewylpxanviyhdwdnci.supabase.co/functions/v1/gmail-attachment-reader",{
+    const response=await fetch("https://tdewylpxanviyhdwdnci.supabase.co/functions/v1/gmail-attachment-reader-v2",{
       method:"POST",
       headers:{"Content-Type":"application/json","Authorization":"Bearer "+session.access_token,"apikey":window.SNABPRO_CONFIG.supabaseKey},
       body:JSON.stringify({companyId:companyId(),messageId,filename})
@@ -52,7 +52,7 @@
   function renderInboxMessage(m) {
     const e=escapeHtml, x=m.extracted||{};
     const prices=(x.price_candidates||[]).map(p=>e(p.amount)+" "+e(p.currency)).join(", ")||"Не распознана";
-    const attachments=(m.attachments||[]).map(a=>{const ext=String(a.filename||"").toLowerCase().split(".").pop();return e(a.filename)+(["pdf","xlsx","xls"].includes(ext)?' <button type="button" data-process-file="'+e(m.id)+'" data-file-name="'+e(a.filename)+'">Извлечь данные</button>':"")}).join(" ");
+    const attachments=(m.attachments||[]).map(a=>{const ext=String(a.filename||"").toLowerCase().split(".").pop();return e(a.filename)+(["pdf","xlsx","xls"].includes(ext)?' <button type="button" data-process-file="'+e(m.gmailMessageId||m.gmail_message_id||m.id)+'" data-file-name="'+e(a.filename)+'">Извлечь данные</button>':"")}).join(" ");
     const supplier=m.supplierName ? "Поставщик: "+e(m.supplierName) : "Поставщик не сопоставлен — проверьте email в карточке поставщика";
     const request=m.requestTitle ? "Заявка: "+e(m.requestTitle) : "";
     const reviewLabel=m.requestId ? "Связано с закупкой · нужна проверка" : m.supplierName ? "Поставщик найден · нужна проверка" : "Не сопоставлено с поставщиком";
