@@ -67,6 +67,44 @@
     } catch(e) { if(out)out.textContent=e.message; }
     finally {if(b){b.disabled=false;b.textContent="Проверить входящие";}}
   }
+
+  function insertSupplierRequest(){
+    const c=window.snabproGetCompany?.()||{};
+    const address=c.address||"АДРЕС ДОСТАВКИ НЕ УКАЗАН — заполните в карточке предприятия";
+    const lines=[
+      "Здравствуйте!",
+      "",
+      "Просим подготовить коммерческое предложение на следующие позиции:",
+      "",
+      "[Укажите материал, марку/характеристики, толщину/размер, количество и единицы измерения]",
+      "",
+      "Просим в ответе указать:",
+      "1. Цену за единицу и общую стоимость по каждой позиции.",
+      "2. Наличие и доступное количество.",
+      "3. Срок отгрузки / изготовления.",
+      "4. Стоимость доставки до нашего адреса отдельной строкой и срок доставки.",
+      "5. Условия оплаты и размер предоплаты.",
+      "6. НДС: включён в цену или нет.",
+      "7. Срок действия коммерческого предложения.",
+      "",
+      "Адрес доставки: "+address,
+      c.delivery_notes?"Особенности доставки/разгрузки: "+c.delivery_notes:"",
+      "",
+      "Наше предприятие: "+(c.name||""),
+      c.contact_person?"Контактное лицо: "+c.contact_person:"",
+      c.phone?"Телефон: "+c.phone:"",
+      c.email?"Email: "+c.email:"",
+      c.inn?"ИНН: "+c.inn:"",
+      "",
+      "Будем благодарны за полный расчёт с доставкой до указанного адреса.",
+      "",
+      "С уважением,",
+      c.name||"Отдел закупок"
+    ].filter(Boolean);
+    $("gmailSubject").value="Запрос коммерческого предложения";
+    $("gmailText").value=lines.join("\\n");
+    $("gmailSendStatus").textContent= c.address ? "Шаблон заполнен реквизитами предприятия. Добавьте позиции и проверьте адрес доставки." : "Внимание: адрес доставки не заполнен. Укажите его в карточке предприятия перед отправкой.";
+  }
   async function sendMail() {
     const b=$("gmailSend"), out=$("gmailSendStatus");
     const to=$("gmailTo")?.value.trim(), subject=$("gmailSubject")?.value.trim(), textBody=$("gmailText")?.value.trim();
@@ -86,7 +124,7 @@
   document.addEventListener("DOMContentLoaded",()=>{
     $("gmailConnect")?.addEventListener("click",connect);
     $("gmailInbox")?.addEventListener("click",inbox);
-    $("gmailSend")?.addEventListener("click",sendMail);
+    $("gmailSend")?.addEventListener("click",sendMail);\n    $("gmailSupplierTemplate")?.addEventListener("click",insertSupplierRequest);
     $("accountBtn")?.addEventListener("click",()=>setTimeout(status,250));
     const params=new URLSearchParams(location.search);
     if(params.get("gmail")==="connected"){history.replaceState({}, "", location.pathname);setTimeout(()=>{status();if(typeof showToast==="function")showToast("Gmail успешно подключён.");},500);}
