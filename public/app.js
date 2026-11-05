@@ -84,25 +84,30 @@ function renderAll(){renderMaterials();renderSuppliers();renderPurchases();rende
 function openPurchase(){
  let chosen=materials.filter(m=>m.selected),items=chosen.length?chosen:materials.slice(0,2);
  let rows=items.map(m=>'<div class="field full" style="border:1px solid var(--line);padding:9px;border-radius:8px"><label><input type="checkbox" class="pcheck" data-id="'+m.id+'" checked> '+eh(m.name)+' · '+eh(m.spec)+'</label><div class="field"><label>Количество ('+eh(m.unit)+')</label><input type="number" min="1" value="'+(m.cat==='Трубы'?300:m.cat==='Металл'?50:100)+'" id="qty'+m.id+'"></div><small class="muted">Поставщики: '+suppliers.filter(s=>s.cats.includes(m.cat)).map(s=>eh(s.name)).join(', ')+'</small></div>').join('');
- modal('Сформировать закупку','<div class="notice">Выберите позиции и количество. СнабПро подготовит отдельное письмо для каждого подходящего поставщика.</div><div class="formgrid">'+rows+'<div class="field full"><label>Комментарий к запросу</label><textarea id="pc" rows="2" style="width:100%;border:1px solid var(--line);border-radius:8px;padding:9px" placeholder="Срок, доставка, оплата…"></textarea></div></div><div class="notice warn">В демоверсии письма открываются в вашей почтовой программе. Автоматическая отправка и мониторинг ответов подключаются отдельно.</div><div class="modalfoot"><button class="btn" onclick="closeModal()">Отмена</button><button class="btn primary" id="modalSave">Создать закупку и письма</button></div>',()=>{
+ modal('Сформировать закупку','<div class="notice">Выберите позиции и количество. СнабПро подготовит отдельное письмо для каждого подходящего поставщика.</div><div class="formgrid">'+rows+'<div class="field full"><label>Комментарий к запросу</label><textarea id="pc" rows="2" style="width:100%;border:1px solid var(--line);border-radius:8px;padding:9px" placeholder="Срок, доставка, оплата…"></textarea></div></div><div class="notice">После создания закупки появятся готовые письма. Откройте письмо в подключённом Gmail, проверьте адрес и нажмите «Отправить» — только после этого поставщик получит запрос.</div><div class="modalfoot"><button class="btn" onclick="closeModal()">Отмена</button><button class="btn primary" id="modalSave">Создать закупку и письма</button></div>',()=>{
   let ids=[...document.querySelectorAll('.pcheck:checked')].map(x=>+x.dataset.id),sel=materials.filter(m=>ids.includes(m.id));
   if(!sel.length){toast('Выберите позицию');return false}
   const quantities=sel.map(m=>({id:m.id,name:m.name,spec:m.spec,qty:Math.max(1,Number($('qty'+m.id).value)||1),unit:m.unit,cat:m.cat}));
   const vendorMap=new Map();
   sel.forEach(m=>suppliers.filter(s=>s.cats.includes(m.cat)).forEach(v=>{
-   if(!vendorMap.has(v.id))vendorMap.set(v.id,{supplier:v,items:[]});
-   vendorMap.get(v.id).items.push(quantities.find(q=>q.id===m.id));
+   const key=(v.email||'').trim().toLowerCase()||'supplier:'+v.id;
+   if(!vendorMap.has(key))vendorMap.set(key,{suppliers:[],items:[]});
+   const group=vendorMap.get(key);
+   if(!group.suppliers.some(x=>x.id===v.id))group.suppliers.push(v);
+   const item=quantities.find(q=>q.id===m.id);
+   if(item&&!group.items.some(x=>x.id===item.id))group.items.push(item);
   }));
   const batchId=Date.now(),comment=$('pc').value.trim(),title='Запрос КП · '+sel.slice(0,2).map(m=>m.name).join(', '),company=window.snabproGetCompany?.()||{};
-  const drafts=[...vendorMap.values()].map(({supplier,items})=>{
+  const drafts=[...vendorMap.values()].map(({suppliers:groupSuppliers,items})=>{
+   const supplier=groupSuppliers[0];
    const subjectToken='SP-'+batchId.toString(36).toUpperCase()+'-'+String(supplier.id);
    const subject=title+' ['+subjectToken+']';
    const body='Добрый день!\n\nПросим подготовить коммерческое предложение на следующие позиции:\n\n'+items.map(x=>'• '+x.name+' — '+x.spec+'; количество: '+x.qty+' '+x.unit).join('\n')+'\n\nПросим указать:\n1. Цену за единицу и общую стоимость;\n2. Наличие и возможный объём поставки;\n3. Срок поставки;\n4. Стоимость и условия доставки;\n5. НДС и условия оплаты;\n6. Срок действия предложения.'+(comment?'\n\nДополнительный комментарий: '+comment:'')+'\n\nАдрес доставки: '+(company.address||'НЕ УКАЗАН — заполните реквизиты предприятия')+(company.delivery_notes?'\nОсобенности разгрузки/доставки: '+company.delivery_notes:'')+(company.name?'\nПредприятие: '+company.name:'')+(company.contact_person?'\nКонтактное лицо: '+company.contact_person:'')+(company.phone?'\nТелефон: '+company.phone:'')+(company.email?'\nEmail: '+company.email:'')+(company.inn?'\nИНН: '+company.inn:'')+'\n\nБудем благодарны за ответ на это письмо.\n\nС уважением, '+(company.contact_person||'отдел снабжения');
-   return {id:batchId+'-'+supplier.id,batchId,supplierLocalId:supplier.id,subjectToken,to:supplier.email||'',supplier:supplier.name,subject,body,items,createdAt:new Date().toISOString(),status:'Черновик'};
+   return {id:batchId+'-'+supplier.id,batchId,supplierLocalId:groupSuppliers.length===1?supplier.id:null,supplierIds:groupSuppliers.map(x=>x.id),subjectToken,to:supplier.email||'',supplier:groupSuppliers.map(x=>x.name).join(' / '),subject,body,items,createdAt:new Date().toISOString(),status:'Черновик'};
   });
   emailDrafts=emailDrafts.concat(drafts);localStorage.setItem('sp_email_drafts',JSON.stringify(emailDrafts));
   purchases.unshift({id:batchId,name:title,items:quantities.map(x=>x.name+' · '+x.qty+' '+x.unit).join('; '),vendors:vendorMap.size,replies:0,status:'Черновики готовы',date:new Date().toLocaleDateString('ru-RU'),draftBatch:batchId,comment,requestItems:quantities,requestSuppliers:drafts.map(d=>({supplierLocalId:d.supplierLocalId,email:d.to,subjectToken:d.subjectToken}))});
-  save();renderAll();toast('Закупка создана. Подготовлено писем: '+drafts.length);go('purchases');return true;
+  save();renderAll();toast('Закупка создана. Подготовлено писем: '+drafts.length);go('purchases');setTimeout(()=>showRequestPreview(),0);return true;
  });
 }
 function showPurchase(id){let p=purchases.find(x=>x.id===id);modal(p.name,'<div class="notice warn">Демо-сценарий: настоящие письма и коммерческие предложения пока не подключены.</div><p style="font-size:11px"><b>Позиции:</b> '+eh(p.items)+'</p><p style="font-size:11px"><b>Поставщиков:</b> '+p.vendors+' · <b>Ответов:</b> '+p.replies+'</p><p style="font-size:11px"><b>Статус:</b> '+eh(p.status)+'</p><div class="panel"><div class="panelhead"><h3>Пример сравнения</h3></div><div class="tablewrap"><table><tr><th>Поставщик</th><th>Цена</th><th>Срок</th></tr><tr><td>МеталлСнаб Север</td><td>8 500 ₽/лист</td><td>2 дня</td></tr><tr><td>СтальТрейд</td><td>7 900 ₽/лист</td><td>7 дней</td></tr></table></div></div><div class="modalfoot"><button class="btn" onclick="closeModal()">Закрыть</button><button class="btn primary" id="modalSave">Завершить закупку</button></div>',()=>{p.status='Завершена';p.replies=p.vendors;save();renderAll();toast('Закупка завершена');return true})}
