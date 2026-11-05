@@ -46,11 +46,20 @@ async function syncWorkspace(){
   const {data,error}=await client.from('purchase_requests').upsert(row).select('id').single();
   if(error)throw error;p.dbId=data.id;
   if(Array.isArray(p.requestItems)&&p.requestItems.length){
-   const {error:delError}=await client.from('purchase_request_items').delete().eq('company_id',company.id).eq('request_id',p.dbId);
-   if(delError)throw delError;
-   const itemRows=p.requestItems.map(x=>({company_id:company.id,request_id:p.dbId,material_id:materials.find(m=>m.id===x.id)?.dbId||null,description:x.name,specification:{text:x.spec||'',category:x.cat||''},quantity:x.qty,unit:x.unit}));
-   const {error:itemError}=await client.from('purchase_request_items').insert(itemRows);
+   const {data:existingItems,error:existingError}=await client.from('purchase_request_items').select('id,description,specification,quantity,unit').eq('company_id',company.id).eq('request_id',p.dbId);
+   if(existingError)throw existingError;
+   const unmatched=[...(existingItems||[])];
+   const itemRows=p.requestItems.map(x=>{
+    let existing=x.dbId?unmatched.find(r=>r.id===x.dbId):null;
+    if(!existing)existing=unmatched.find(r=>r.description===x.name&&Number(r.quantity)===Number(x.qty)&&r.unit===x.unit&&(r.specification?.text||'')===(x.spec||''));
+    if(existing){const idx=unmatched.findIndex(r=>r.id===existing.id);if(idx>=0)unmatched.splice(idx,1);x.dbId=existing.id;}
+    const row={company_id:company.id,request_id:p.dbId,material_id:materials.find(m=>m.id===x.id)?.dbId||null,description:x.name,specification:{text:x.spec||'',category:x.cat||''},quantity:x.qty,unit:x.unit};
+    if(x.dbId)row.id=x.dbId;
+    return row;
+   });
+   const {data:savedItems,error:itemError}=await client.from('purchase_request_items').upsert(itemRows).select('id');
    if(itemError)throw itemError;
+   p.requestItems.forEach((x,i)=>x.dbId=savedItems[i]?.id||x.dbId);
   }
   if(p.draftBatch){
    const batchDrafts=emailDrafts.filter(d=>d.batchId===p.draftBatch);
@@ -382,7 +391,7 @@ async function openDocumentReview(documentId){
    if(row.itemId)seen.add(row.itemId);
   }
   const btn=$('drSubmit');btn.disabled=true;btn.textContent='Сохраняем…';
-  let requestId=selectedRequest,createdRequest=false,createdItemIds=[];
+  let requestId=selectedRequest,createdRequest=false,createdRequestTitle='',createdItemIds=[];
   const cleanupCreated=async()=>{
    if(createdItemIds.length)await client.from('purchase_request_items').delete().eq('company_id',company.id).in('id',createdItemIds);
    if(createdRequest&&requestId)await client.from('purchase_requests').delete().eq('company_id',company.id).eq('id',requestId);
@@ -391,6 +400,7 @@ async function openDocumentReview(documentId){
    const {data:userData,error:userError}=await client.auth.getUser();
    if(userError||!userData?.user){btn.disabled=false;btn.textContent='Подтвердить и добавить в сравнение';toast('Не удалось определить пользователя предприятия');return;}
    const title=$('drNewTitle').value.trim()||'Закупка по КП · '+doc.original_filename;
+   createdRequestTitle=title;
    const {data:newRequest,error:requestError}=await client.from('purchase_requests').insert({company_id:company.id,title,status:'collecting',created_by:userData.user.id,details:{source:'quote_document',document_id:doc.id}}).select('id').single();
    if(requestError){btn.disabled=false;btn.textContent='Подтвердить и добавить в сравнение';toast('Не удалось создать закупку: '+requestError.message);return;}
    requestId=newRequest.id;createdRequest=true;
@@ -417,6 +427,12 @@ async function openDocumentReview(documentId){
   const {error:itemError}=await client.from('quote_items').insert(quoteItems);
   if(itemError){await client.from('supplier_quotes').delete().eq('id',quoteRow.id).eq('company_id',company.id);await cleanupCreated();btn.disabled=false;btn.textContent='Подтвердить и добавить в сравнение';toast('Не удалось сохранить позиции КП: '+itemError.message);return;}
   const {error:docError}=await client.from('quote_documents').update({extraction_status:'approved',request_id:requestId,supplier_id:supplierId}).eq('id',doc.id).eq('company_id',company.id);
+  if(createdRequest){
+   const localId=Date.now();
+   const localItems=rows.map((row,i)=>({id:localId+i,dbId:createdItemIds[i],name:row.description,spec:row.spec,qty:row.quantity,unit:row.unit,cat:'Другое'}));
+   purchases.unshift({id:localId,dbId:requestId,name:createdRequestTitle,items:rows.map(row=>row.description+' · '+row.quantity+' '+row.unit).join('; '),vendors:1,replies:1,status:'КП получено',date:new Date().toLocaleDateString('ru-RU'),requestItems:localItems});
+   save();renderPurchases();renderDashboard();
+  }
   closeModal();await window.snabproRefreshQuotes?.();await renderUploadedDocuments();
   toast(docError?'КП добавлено в сравнение. Статус документа не обновился.':'КП подтверждено: добавлено позиций — '+quoteItems.length+'.');
  }); 
