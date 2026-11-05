@@ -118,7 +118,7 @@
       const meta=window.snabproCurrentDraftMeta||{};
       const result=await call("send",{to,subject:subject||"Запрос коммерческого предложения",text:textBody,requestId:meta.requestId||null,subjectToken:meta.subjectToken||null});
       if(out)out.textContent="Письмо успешно отправлено на "+to+".";
-      if(meta.draftId){const drafts=JSON.parse(localStorage.getItem("sp_email_drafts")||"[]");const d=drafts.find(x=>x.id===meta.draftId);if(d)d.status="Отправлено";localStorage.setItem("sp_email_drafts",JSON.stringify(drafts));window.snabproCurrentDraftMeta=null;}
+      if(meta.draftId){const drafts=JSON.parse(localStorage.getItem("sp_email_drafts")||"[]");const d=drafts.find(x=>x.id===meta.draftId);if(d)d.status="Отправлено";localStorage.setItem("sp_email_drafts",JSON.stringify(drafts));window.snabproMarkDraftSent?.(meta.draftId);window.snabproCurrentDraftMeta=null;}
       if(typeof showToast==="function")showToast("Письмо отправлено.");
     } catch(e) { if(out)out.textContent="Не удалось отправить: "+e.message; }
     finally {if(b){b.disabled=false;b.textContent="Отправить письмо";}}
