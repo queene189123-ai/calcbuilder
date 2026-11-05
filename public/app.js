@@ -166,6 +166,37 @@ localStorage.setItem('sp_email_drafts',JSON.stringify(emailDrafts));
 window.snabproMarkDraftSent=draftId=>{const d=emailDrafts.find(x=>x.id===draftId);if(d)d.status='Отправлено';localStorage.setItem('sp_email_drafts',JSON.stringify(emailDrafts));};
 const money=n=>new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(Math.round(n))+' ₽';
 function quotesForSelected(){let m=$('quoteMaterial')?.value||'Труба нержавеющая Ø25 мм';return quoteOffers.filter(q=>q.material===m)}
+function syncQuoteMaterialOptions(preferFirst=false){
+ const select=$('quoteMaterial');if(!select)return;
+ const current=select.value,labels=[...new Set(quoteOffers.map(q=>q.material).filter(Boolean))];
+ const known=new Set([...select.options].map(o=>o.value));
+ labels.forEach(label=>{if(!known.has(label)){const option=document.createElement('option');option.value=label;option.textContent=label;select.appendChild(option)}});
+ if(preferFirst&&labels.length)select.value=labels[0];
+ else if(current&&[...select.options].some(o=>o.value===current))select.value=current;
+}
+async function loadCompanyQuotes(company){
+ const client=window.snabproClient;if(!client||!company?.id)return;
+ const [q,qi,ri]=await Promise.all([
+  client.from('supplier_quotes').select('*').eq('company_id',company.id).order('created_at',{ascending:false}),
+  client.from('quote_items').select('*').eq('company_id',company.id).order('created_at',{ascending:false}),
+  client.from('purchase_request_items').select('id,description,specification,quantity,unit').eq('company_id',company.id)
+ ]);
+ if(q.error)throw q.error;if(qi.error)throw qi.error;if(ri.error)throw ri.error;
+ const quoteById=new Map((q.data||[]).map(x=>[x.id,x]));
+ const itemById=new Map((ri.data||[]).map(x=>[x.id,x]));
+ const supplierById=new Map(suppliers.filter(x=>x.dbId).map(x=>[x.dbId,x]));
+ quoteOffers=(qi.data||[]).flatMap(item=>{
+  const quote=quoteById.get(item.quote_id);if(!quote)return [];
+  const requestItem=item.request_item_id?itemById.get(item.request_item_id):null;
+  const spec=item.specification?.text||requestItem?.specification?.text||'';
+  const material=String(item.description||requestItem?.description||'Позиция закупки')+(spec?' · '+spec:'');
+  const supplier=supplierById.get(quote.supplier_id);
+  return [{id:item.id,dbQuoteId:quote.id,material,supplier:supplier?.name||'Поставщик',unitPrice:Number(item.unit_price)||0,qty:Number(item.quantity??requestItem?.quantity)||1,delivery:Number(quote.delivery_cost)||0,vat:item.vat_included===true?'НДС включён':item.vat_included===false?'Без НДС':'Не указано',lead:Number(quote.lead_time_days)||0,unit:item.unit||requestItem?.unit||'шт.',spec:spec||'Характеристики не указаны',status:'Получено из почты',source:item.source_excerpt||quote.notes||'Письмо поставщика',currency:quote.currency||'RUB'}];
+ });
+ localStorage.setItem('sp_quotes',JSON.stringify(quoteOffers));
+ syncQuoteMaterialOptions(true);renderQuotes();
+}
+window.snabproRefreshQuotes=async()=>{const company=window.snabproGetCompany?.();if(!company)throw new Error('Предприятие не выбрано');await loadCompanyQuotes(company);return quoteOffers.length};
 function renderQuotes(){
  const arr=quotesForSelected(),body=$('quotesBody');if(!body)return;
  const sorted=arr.map(q=>({...q,total:q.qty*q.unitPrice+q.delivery})).sort((a,b)=>a.total-b.total),best=sorted[0],worst=sorted[sorted.length-1];
@@ -284,7 +315,7 @@ window.snabproLoadWorkspace=async function(company){
   suppliers=(s.data||[]).map((x,i)=>({id:i+1,dbId:x.id,name:x.name,email:x.email||'',contact:x.contact||x.phone||'',region:x.region||'',cats:x.categories||[],rating:x.rating||'—',lead:x.lead_time||'Не указан'}));
   purchases=(p.data||[]).map((x,i)=>({id:i+1,dbId:x.id,name:x.title,items:x.details?.items||'',vendors:x.details?.vendors||0,replies:x.details?.replies||0,status:x.status==='completed'?'Завершена':x.status==='cancelled'?'Отменена':(linkStatuses.get(x.id)?.length&&linkStatuses.get(x.id).every(v=>v==='sent')?'Ожидаем ответы':'Черновики готовы'),date:x.details?.date||new Date(x.created_at).toLocaleDateString('ru-RU')}));
   materials.forEach(m=>m.sup=suppliers.filter(v=>v.cats.includes(m.cat)).length);
-  quoteOffers=[];localStorage.setItem('sp_quotes','[]');
+  try{await loadCompanyQuotes(company);}catch(quoteError){console.warn('Не удалось загрузить КП из базы:',quoteError);quoteOffers=[];localStorage.setItem('sp_quotes','[]');}
   window.snabproWorkspaceReady=true;
   save();renderAll();await renderUploadedDocuments(d.data||[]);
   toast('Загружены данные предприятия «'+company.name+'».');
