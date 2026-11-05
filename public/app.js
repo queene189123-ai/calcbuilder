@@ -276,29 +276,38 @@ async function openDocumentReview(documentId){
  for(const r of [docRes,supplierRes,requestRes,itemRes])if(r.error){toast('Не удалось открыть проверку: '+r.error.message);return;}
  const doc=docRes.data,ex=doc.extracted_data||{},candidate=(ex.price_candidates||[])[0]||{};
  const suppliersList=supplierRes.data||[],requests=requestRes.data||[],items=itemRes.data||[];
- const initialRequest=doc.request_id||requests[0]?.id||'';
+ const createRequestValue='__new__';
+ const initialRequest=doc.request_id||createRequestValue;
  const requestItems=items.filter(x=>x.request_id===initialRequest);
  const textPreview=ex.text_preview||'';
  const currency=candidate.currency||'RUB';
  const itemOptions=(list,selected='')=>list.map(x=>'<option value="'+eh(x.id)+'" '+(x.id===selected?'selected':'')+'>'+eh(x.description)+' · '+eh(x.quantity)+' '+eh(x.unit)+'</option>').join('');
  const supplierOptions=suppliersList.map(x=>'<option value="'+eh(x.id)+'" '+(x.id===doc.supplier_id?'selected':'')+'>'+eh(x.name)+'</option>').join('');
- const requestOptions=requests.map(x=>'<option value="'+eh(x.id)+'" '+(x.id===initialRequest?'selected':'')+'>'+eh(x.title)+'</option>').join('');
+ const requestOptions='<option value="'+createRequestValue+'" '+(initialRequest===createRequestValue?'selected':'')+'>＋ Создать новую закупку из этого КП</option>'+requests.map(x=>'<option value="'+eh(x.id)+'" '+(x.id===initialRequest?'selected':'')+'>'+eh(x.title)+'</option>').join('');
  const priceMatches=[...textPreview.matchAll(/(?:^|\s)\d{1,2}\s+.{3,180}?\s+\d+(?:[.,]\d+)?\s+(?:лист|шт\.?|м|метр|упак\.?)\s+([\d\s]+[,.]\d{2})(?=\s|$)/gim)].map(m=>Number(m[1].replace(/\s/g,'').replace(',','.'))).filter(n=>n>0);
+ const detectedRows=(textPreview.match(/\b\d+\s*(?:лист(?:ов|а)?|шт\.?|м)\b/gi)||[]).length;
  const makeRow=(index,itemId='',priceValue='')=>{
-  const rowItems=items.filter(x=>x.request_id===$('drRequest')?.value||x.request_id===initialRequest);
+  const item=items.find(x=>x.id===itemId);
+  const rowItems=items.filter(x=>x.request_id===initialRequest);
   return '<div class="dr-quote-row" data-quote-row style="border:1px solid var(--line,#ddd);border-radius:10px;padding:12px;margin:10px 0">'+
-   '<div class="field full"><label>Позиция закупки</label><select data-row-item>'+itemOptions(rowItems,itemId)+'</select></div>'+
-   '<div class="formgrid"><div class="field"><label>Цена за единицу, ₽</label><input data-row-price type="number" min="0.0001" step="0.01" value="'+eh(priceValue)+'" placeholder="Введите цену"></div>'+
-   '<div class="field"><label>Срок, дней</label><input data-row-lead type="number" min="0" value=""></div>'+
-   '<div class="field full"><label>Наличие / комментарий</label><input data-row-availability placeholder="Например, в наличии"></div></div>'+
+   '<div class="field full"><label>Связать с позицией существующей закупки (необязательно)</label><select data-row-item><option value="">Без привязки — создать позицию из строки КП</option>'+itemOptions(rowItems,itemId)+'</select></div>'+
+   '<div class="formgrid"><div class="field full"><label>Материал / наименование позиции</label><input data-row-description value="'+eh(item?.description||'')+'" placeholder="Например, Ст3сп лист 1500×6000"></div>'+
+   '<div class="field full"><label>Характеристики</label><input data-row-spec value="'+eh(item?.specification?.text||'')+'" placeholder="Марка, толщина, размеры, стандарт"></div>'+
+   '<div class="field"><label>Количество</label><input data-row-quantity type="number" min="0.0001" step="0.0001" value="'+eh(item?.quantity??'')+'" placeholder="20"></div>'+
+   '<div class="field"><label>Единица</label><input data-row-unit value="'+eh(item?.unit||'лист')+'" placeholder="лист, кг, м, шт."></div>'+
+   '<div class="field"><label>Цена за единицу, ₽</label><input data-row-price type="number" min="0.0001" step="0.01" value="'+eh(priceValue)+'" placeholder="Введите цену"></div>'+
+   '<div class="field"><label>Срок, дней</label><input data-row-lead type="number" min="0" value="'+eh(ex.lead_time_days||'')+'"></div>'+
+   '<div class="field full"><label>Наличие / комментарий</label><input data-row-availability value="'+eh(ex.availability||'')+'" placeholder="Например, в наличии"></div></div>'+
    '<button class="btn" type="button" data-remove-quote-row>Удалить позицию</button></div>';
  };
- const initialRows=requestItems.length?requestItems.map((it,i)=>makeRow(i,it.id,priceMatches[i]||'')).join(''):makeRow(0,'',priceMatches[0]||'');
+ const rowCount=initialRequest===createRequestValue?Math.max(1,Math.min(12,detectedRows||priceMatches.length||1)):Math.max(1,requestItems.length);
+ const initialRows=Array.from({length:rowCount},(_,i)=>makeRow(i,initialRequest===createRequestValue?'':requestItems[i]?.id||'',priceMatches[i]||'')).join('');
  modal('Проверка коммерческого предложения',
-  '<div class="notice">Одно коммерческое предложение может содержать несколько позиций. Проверьте каждую строку: в сравнение попадут все добавленные позиции.</div>'+
+  '<div class="notice">Можно привязать КП к существующей закупке или создать новую прямо из документа. Для каждой строки проверьте наименование, характеристики, количество и цену. Новая закупка и её позиции создадутся только после нажатия «Подтвердить».</div>'+
   '<div class="formgrid">'+
   '<div class="field full"><label>Поставщик</label><select id="drSupplier">'+supplierOptions+'</select></div>'+
   '<div class="field full"><label>Закупка</label><select id="drRequest">'+requestOptions+'</select></div>'+
+  '<div class="field"><label>Название новой закупки</label><input id="drNewTitle" value="'+eh('КП · '+(suppliersList.find(x=>x.id===doc.supplier_id)?.name||doc.original_filename||'Новая закупка'))+'"></div>'+
   '<div class="field"><label>Валюта</label><select id="drCurrency"><option '+(currency==='RUB'?'selected':'')+' value="RUB">RUB · ₽</option><option '+(currency==='USD'?'selected':'')+' value="USD">USD · $</option><option '+(currency==='EUR'?'selected':'')+' value="EUR">EUR · €</option></select></div>'+
   '<div class="field"><label>Доставка, ₽</label><input id="drDelivery" type="number" min="0" step="0.01" value="'+eh(ex.delivery_cost||'0')+'"></div>'+
   '<div class="field"><label>НДС</label><select id="drVat"><option value="">Не указано</option><option value="yes" '+(ex.vat==='С НДС'?'selected':'')+'>Включён</option><option value="no" '+(ex.vat==='Без НДС'?'selected':'')+'>Без НДС</option></select></div>'+
@@ -307,15 +316,24 @@ async function openDocumentReview(documentId){
   '</div><div class="modalfoot"><button class="btn" type="button" onclick="closeModal()">Отмена</button><button class="btn primary" type="button" id="drSubmit">Подтвердить и добавить в сравнение</button></div>',()=>false);
  const rowsEl=$('drQuoteRows');
  const refreshRowOptions=()=>{
-  const list=items.filter(x=>x.request_id===$('drRequest').value);
+  const requestId=$('drRequest').value;
+  const list=requestId===createRequestValue?[]:items.filter(x=>x.request_id===requestId);
   rowsEl.querySelectorAll('[data-row-item]').forEach(sel=>{
-   const old=sel.value;sel.innerHTML=itemOptions(list,old);
+   const old=sel.value;sel.innerHTML='<option value="">Без привязки — создать позицию из строки КП</option>'+itemOptions(list,old);
+   if(old&&!list.some(x=>x.id===old))sel.value='';
   });
  };
  $('drRequest').addEventListener('change',refreshRowOptions);
+ rowsEl.addEventListener('change',e=>{
+  const sel=e.target.closest('[data-row-item]');if(!sel||!sel.value)return;
+  const item=items.find(x=>x.id===sel.value),row=sel.closest('[data-quote-row]');if(!item||!row)return;
+  row.querySelector('[data-row-description]').value=item.description||'';
+  row.querySelector('[data-row-spec]').value=item.specification?.text||'';
+  row.querySelector('[data-row-quantity]').value=item.quantity??'';
+  row.querySelector('[data-row-unit]').value=item.unit||'шт.';
+ });
  $('drAddRow').addEventListener('click',()=>{
-  const list=items.filter(x=>x.request_id===$('drRequest').value);
-  const wrap=document.createElement('div');wrap.innerHTML=makeRow(rowsEl.children.length,list[0]?.id||'','');
+  const wrap=document.createElement('div');wrap.innerHTML=makeRow(rowsEl.children.length,'','');
   rowsEl.appendChild(wrap.firstElementChild);refreshRowOptions();
  });
  rowsEl.addEventListener('click',e=>{
@@ -324,70 +342,65 @@ async function openDocumentReview(documentId){
   btn.closest('[data-quote-row]').remove();
  });
  $('drSubmit').addEventListener('click',async()=>{
-  const supplierId=$('drSupplier').value,requestId=$('drRequest').value,delivery=Number($('drDelivery').value||0);
+  const supplierId=$('drSupplier').value,selectedRequest=$('drRequest').value,delivery=Number($('drDelivery').value||0);
   const rows=[...rowsEl.querySelectorAll('[data-quote-row]')].map(el=>({
    itemId:el.querySelector('[data-row-item]').value,
+   description:el.querySelector('[data-row-description]').value.trim(),
+   spec:el.querySelector('[data-row-spec]').value.trim(),
+   quantity:Number(el.querySelector('[data-row-quantity]').value),
+   unit:el.querySelector('[data-row-unit]').value.trim(),
    price:Number(el.querySelector('[data-row-price]').value),
    lead:Number(el.querySelector('[data-row-lead]').value||0),
    availability:el.querySelector('[data-row-availability]').value.trim()
   }));
-  if(!supplierId||!requestId||delivery<0||!rows.length){toast('Выберите поставщика и закупку, проверьте доставку');return;}
+  if(!supplierId||!selectedRequest||delivery<0||!rows.length){toast('Выберите поставщика, закупку и проверьте доставку');return;}
   const seen=new Set();
   for(const row of rows){
-   const item=items.find(x=>x.id===row.itemId);
-   if(!item||item.request_id!==requestId||!(row.price>0)||row.lead<0||seen.has(row.itemId)){
-    toast('Проверьте позиции: выберите разные позиции закупки и укажите цену для каждой');return;
+   const item=row.itemId?items.find(x=>x.id===row.itemId):null;
+   if(!row.description||!(row.quantity>0)||!row.unit||!(row.price>0)||row.lead<0||(row.itemId&&(!item||item.request_id!==selectedRequest||seen.has(row.itemId)))){
+    toast('Проверьте строки: нужны наименование, количество, единица и цена; позиции закупки не должны повторяться');return;
    }
-   seen.add(row.itemId);
+   if(row.itemId)seen.add(row.itemId);
   }
   const btn=$('drSubmit');btn.disabled=true;btn.textContent='Сохраняем…';
+  let requestId=selectedRequest,createdRequest=false,createdItemIds=[];
+  const cleanupCreated=async()=>{
+   if(createdItemIds.length)await client.from('purchase_request_items').delete().eq('company_id',company.id).in('id',createdItemIds);
+   if(createdRequest&&requestId)await client.from('purchase_requests').delete().eq('company_id',company.id).eq('id',requestId);
+  };
+  if(selectedRequest===createRequestValue){
+   const {data:userData,error:userError}=await client.auth.getUser();
+   if(userError||!userData?.user){btn.disabled=false;btn.textContent='Подтвердить и добавить в сравнение';toast('Не удалось определить пользователя предприятия');return;}
+   const title=$('drNewTitle').value.trim()||'Закупка по КП · '+doc.original_filename;
+   const {data:newRequest,error:requestError}=await client.from('purchase_requests').insert({company_id:company.id,title,status:'collecting',created_by:userData.user.id,details:{source:'quote_document',document_id:doc.id}}).select('id').single();
+   if(requestError){btn.disabled=false;btn.textContent='Подтвердить и добавить в сравнение';toast('Не удалось создать закупку: '+requestError.message);return;}
+   requestId=newRequest.id;createdRequest=true;
+   const newItemRows=rows.map(row=>({company_id:company.id,request_id:requestId,description:row.description,specification:{text:row.spec},quantity:row.quantity,unit:row.unit}));
+   const {data:newItems,error:newItemsError}=await client.from('purchase_request_items').insert(newItemRows).select('id');
+   if(newItemsError){await cleanupCreated();btn.disabled=false;btn.textContent='Подтвердить и добавить в сравнение';toast('Не удалось создать позиции закупки: '+newItemsError.message);return;}
+   createdItemIds=(newItems||[]).map(x=>x.id);
+   rows.forEach((row,i)=>row.itemId=createdItemIds[i]);
+  }else{
+   const rowsWithoutLink=rows.filter(row=>!row.itemId);
+   if(rowsWithoutLink.length){
+    const newItemRows=rowsWithoutLink.map(row=>({company_id:company.id,request_id:requestId,description:row.description,specification:{text:row.spec},quantity:row.quantity,unit:row.unit}));
+    const {data:newItems,error:newItemsError}=await client.from('purchase_request_items').insert(newItemRows).select('id');
+    if(newItemsError){btn.disabled=false;btn.textContent='Подтвердить и добавить в сравнение';toast('Не удалось добавить позиции в закупку: '+newItemsError.message);return;}
+    createdItemIds=(newItems||[]).map(x=>x.id);
+    let cursor=0;rows.forEach(row=>{if(!row.itemId)row.itemId=createdItemIds[cursor++];});
+   }
+  }
   const quote={company_id:company.id,request_id:requestId,supplier_id:supplierId,document_id:doc.id,currency:$('drCurrency').value,delivery_cost:delivery,lead_time_days:(rows.every(x=>x.lead>0&&x.lead===rows[0].lead)?rows[0].lead:null),notes:'Проверено вручную по документу '+doc.original_filename};
   const {data:quoteRow,error:quoteError}=await client.from('supplier_quotes').insert(quote).select('id').single();
-  if(quoteError){btn.disabled=false;btn.textContent='Подтвердить и добавить в сравнение';toast('Не удалось сохранить КП: '+quoteError.message);return;}
+  if(quoteError){await cleanupCreated();btn.disabled=false;btn.textContent='Подтвердить и добавить в сравнение';toast('Не удалось сохранить КП: '+quoteError.message);return;}
   const vat=$('drVat').value;
-  const quoteItems=rows.map(row=>{
-   const item=items.find(x=>x.id===row.itemId);
-   return {company_id:company.id,quote_id:quoteRow.id,request_item_id:item.id,description:item.description,specification:{...(item.specification||{}),lead_time_days:row.lead||null},quantity:item.quantity,unit:item.unit,unit_price:row.price,vat_included:vat===''?null:vat==='yes',availability:row.availability||null,confidence:priceMatches.length?0.75:0.5,source_excerpt:textPreview.slice(0,1000)||doc.original_filename};
-  });
+  const quoteItems=rows.map(row=>({company_id:company.id,quote_id:quoteRow.id,request_item_id:row.itemId,description:row.description,specification:{text:row.spec,lead_time_days:row.lead||null},quantity:row.quantity,unit:row.unit,unit_price:row.price,vat_included:vat===''?null:vat==='yes',availability:row.availability||null,confidence:priceMatches.length?0.75:0.5,source_excerpt:textPreview.slice(0,1000)||doc.original_filename}));
   const {error:itemError}=await client.from('quote_items').insert(quoteItems);
-  if(itemError){await client.from('supplier_quotes').delete().eq('id',quoteRow.id).eq('company_id',company.id);btn.disabled=false;btn.textContent='Подтвердить и добавить в сравнение';toast('Не удалось сохранить позиции КП: '+itemError.message);return;}
-  const {error:docError}=await client.from('quote_documents').update({extraction_status:'approved'}).eq('id',doc.id).eq('company_id',company.id);
+  if(itemError){await client.from('supplier_quotes').delete().eq('id',quoteRow.id).eq('company_id',company.id);await cleanupCreated();btn.disabled=false;btn.textContent='Подтвердить и добавить в сравнение';toast('Не удалось сохранить позиции КП: '+itemError.message);return;}
+  const {error:docError}=await client.from('quote_documents').update({extraction_status:'approved',request_id:requestId,supplier_id:supplierId}).eq('id',doc.id).eq('company_id',company.id);
   closeModal();await window.snabproRefreshQuotes?.();await renderUploadedDocuments();
   toast(docError?'КП добавлено в сравнение. Статус документа не обновился.':'КП подтверждено: добавлено позиций — '+quoteItems.length+'.');
- });
-}
-async function importQuoteFile(){
- const f=$('quoteFile')?.files?.[0];if(!f){toast('Выберите файл');return}
- const ext=f.name.split('.').pop().toLowerCase();
- if(['pdf','xlsx','xls','docx','doc'].includes(ext)){
-  const client=window.snabproClient,company=window.snabproGetCompany?.();
-  if(!client){toast('Модуль подключения не загружен. Обновите страницу.');return}
-  if(!company){toast('Сначала войдите и зарегистрируйте предприятие через кнопку «Войти».');return}
-  try{
-   const {data:{user},error:userError}=await client.auth.getUser();
-   if(userError||!user){toast('Войдите в аккаунт перед загрузкой документа.');return}
-   const safeName=f.name.replace(/[^a-zA-Z0-9._-]+/g,'_').slice(-120)||'quote.'+ext;
-   const token=window.crypto?.randomUUID?.()||String(Date.now());
-   const path=company.id+'/'+token+'-'+safeName;
-   const mime=f.type||({pdf:'application/pdf',xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',xls:'application/vnd.ms-excel',docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',doc:'application/msword'}[ext]);
-   const {error:uploadError}=await client.storage.from('quote-documents').upload(path,f,{contentType:mime,upsert:false});
-   if(uploadError)throw uploadError;
-   const {error:rowError}=await client.from('quote_documents').insert({
-    company_id:company.id,storage_path:path,original_filename:f.name,mime_type:mime,
-    extraction_status:'uploaded',uploaded_by:user.id
-   });
-   if(rowError){await client.storage.from('quote-documents').remove([path]);throw rowError;}
-   toast('Документ безопасно сохранён в закрытом хранилище предприятия. AI-распознавание подключим следующим серверным этапом.');
-   $('quoteFile').value='';await renderUploadedDocuments();
-  }catch(e){toast('Не удалось загрузить документ: '+(e.message||'ошибка доступа'))}
-  return;
- }
- if(!['csv','txt','eml'].includes(ext)){toast('Поддерживаются CSV, TXT, EML, PDF, XLSX, XLS, DOCX и DOC.');return}
- const reader=new FileReader();reader.onload=()=>{const t=String(reader.result||'');const lines=t.split(/\r?\n/).filter(Boolean);let added=0;
-  lines.slice(1).forEach(line=>{const cells=line.split(/[;,\t]/).map(x=>x.trim().replace(/^"|"$/g,''));if(cells.length>=4){const [material,supplier,price,qty,delivery='0',vat='Не указано',lead='0',spec=''] = cells;const m=material.toLowerCase().includes('труб')?'Труба нержавеющая Ø25 мм':material.toLowerCase().includes('абс')?'АБС-пластик · лист 3 мм':'Нержавеющая сталь AISI 304 · лист';if(Number(price)>0&&Number(qty)>0){quoteOffers.push({id:Date.now()+added,material:m,supplier,unitPrice:Number(price),qty:Number(qty),delivery:Number(delivery)||0,vat,lead:Number(lead)||0,unit:m.includes('Труба')?'м':'лист',spec:spec||'Не указано',status:'Импортировано',source:f.name});added++}}});
-  if(!added){const price=(t.match(/(?:цена|price)\D{0,15}(\d+[.,]?\d*)/i)||[])[1];toast(price?'Формат не распознан автоматически. Добавьте КП вручную.':'Не удалось извлечь табличные строки. Используйте шаблон CSV.');return}
-  localStorage.setItem('sp_quotes',JSON.stringify(quoteOffers));renderQuotes();toast('Импортировано КП: '+added);
- };reader.readAsText(f,'UTF-8');
+ }); 
 }
 function buildManagementReport(){
  const all=quoteOffers,by={};all.forEach(q=>{(by[q.material]??=[]).push({...q,total:q.qty*q.unitPrice+q.delivery})});
