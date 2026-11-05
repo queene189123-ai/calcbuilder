@@ -329,13 +329,13 @@ async function openDocumentReview(documentId){
    seen.add(row.itemId);
   }
   const btn=$('drSubmit');btn.disabled=true;btn.textContent='Сохраняем…';
-  const quote={company_id:company.id,request_id:requestId,supplier_id:supplierId,document_id:doc.id,currency:$('drCurrency').value,delivery_cost:delivery,lead_time_days:null,notes:'Проверено вручную по документу '+doc.original_filename};
+  const quote={company_id:company.id,request_id:requestId,supplier_id:supplierId,document_id:doc.id,currency:$('drCurrency').value,delivery_cost:delivery,lead_time_days:(rows.every(x=>x.lead>0&&x.lead===rows[0].lead)?rows[0].lead:null),notes:'Проверено вручную по документу '+doc.original_filename};
   const {data:quoteRow,error:quoteError}=await client.from('supplier_quotes').insert(quote).select('id').single();
   if(quoteError){btn.disabled=false;btn.textContent='Подтвердить и добавить в сравнение';toast('Не удалось сохранить КП: '+quoteError.message);return;}
   const vat=$('drVat').value;
   const quoteItems=rows.map(row=>{
    const item=items.find(x=>x.id===row.itemId);
-   return {company_id:company.id,quote_id:quoteRow.id,request_item_id:item.id,description:item.description,specification:item.specification||{},quantity:item.quantity,unit:item.unit,unit_price:row.price,vat_included:vat===''?null:vat==='yes',availability:row.availability||null,confidence:priceMatches.length?0.75:0.5,source_excerpt:textPreview.slice(0,1000)||doc.original_filename};
+   return {company_id:company.id,quote_id:quoteRow.id,request_item_id:item.id,description:item.description,specification:{...(item.specification||{}),lead_time_days:row.lead||null},quantity:item.quantity,unit:item.unit,unit_price:row.price,vat_included:vat===''?null:vat==='yes',availability:row.availability||null,confidence:priceMatches.length?0.75:0.5,source_excerpt:textPreview.slice(0,1000)||doc.original_filename};
   });
   const {error:itemError}=await client.from('quote_items').insert(quoteItems);
   if(itemError){await client.from('supplier_quotes').delete().eq('id',quoteRow.id).eq('company_id',company.id);btn.disabled=false;btn.textContent='Подтвердить и добавить в сравнение';toast('Не удалось сохранить позиции КП: '+itemError.message);return;}
