@@ -31,7 +31,7 @@
     else { activeCompany=null; $('companyList').innerHTML=''; window.snabproResetWorkspace?.(); }
   }
   async function loadCompanies(){
-    const {data,error}=await client.from('companies').select('id,name,created_at').order('created_at',{ascending:true});
+    const {data,error}=await client.from('companies').select('id,name,created_at,contact_person,phone,email,address,inn,delivery_notes').order('created_at',{ascending:true});
     if(error){note('Не удалось загрузить предприятия: '+error.message,true);return;}
     const list=$('companyList');
     list.innerHTML='';
@@ -48,9 +48,39 @@
     });
     const saved=localStorage.getItem('sp_company_id');
     activeCompany=data.find(c=>c.id===saved)||data[0];
-    if(activeCompany){localStorage.setItem('sp_company_id',activeCompany.id);localStorage.setItem('sp_company_name',activeCompany.name);await window.snabproLoadWorkspace?.(activeCompany);}
+    if(activeCompany){localStorage.setItem('sp_company_id',activeCompany.id);localStorage.setItem('sp_company_name',activeCompany.name);fillCompanyProfile();await window.snabproLoadWorkspace?.(activeCompany);}
     [...list.children].forEach((el,i)=>el.classList.toggle('selected',data[i]?.id===activeCompany?.id));
     note(activeCompany?'Рабочее пространство подключено. Данные предприятия будут храниться отдельно.':'');
+  }
+
+  function fillCompanyProfile(){
+    if(!activeCompany) return;
+    const fields={companyContact:activeCompany.contact_person,companyPhone:activeCompany.phone,companyEmail:activeCompany.email,companyAddress:activeCompany.address,companyInn:activeCompany.inn,companyDeliveryNotes:activeCompany.delivery_notes};
+    Object.entries(fields).forEach(([id,value])=>{const el=$(id);if(el)el.value=value||'';});
+    const title=$('companyProfileTitle');if(title)title.textContent=activeCompany.name;
+  }
+  async function saveCompanyProfile(){
+    if(!activeCompany){note('Сначала выберите предприятие.',true);return;}
+    const b=$('companyProfileSave');
+    const payload={
+      contact_person:$('companyContact').value.trim()||null,
+      phone:$('companyPhone').value.trim()||null,
+      email:$('companyEmail').value.trim()||null,
+      address:$('companyAddress').value.trim()||null,
+      inn:$('companyInn').value.trim()||null,
+      delivery_notes:$('companyDeliveryNotes').value.trim()||null,
+      updated_at:new Date().toISOString()
+    };
+    if(payload.email&&!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(payload.email)){note('Проверьте email предприятия.',true);return;}
+    try{
+      if(b){b.disabled=true;b.textContent='Сохраняем…';}
+      const {data,error}=await client.from('companies').update(payload).eq('id',activeCompany.id).select('id,name,contact_person,phone,email,address,inn,delivery_notes').single();
+      if(error)throw error;
+      activeCompany={...activeCompany,...data};
+      fillCompanyProfile();
+      note('Реквизиты предприятия сохранены. Они будут подставляться в запросы поставщикам.');
+    }catch(e){note(e.message||'Не удалось сохранить реквизиты.',true);}
+    finally{if(b){b.disabled=false;b.textContent='Сохранить реквизиты';}}
   }
   async function submitAuth(mode){
     const email=$('authEmail').value.trim(),password=$('authPassword').value;
@@ -103,7 +133,7 @@
     $('authSignup').addEventListener('click',()=>{ $('authMode').textContent='Регистрация';$('authSubmit').dataset.mode='signup';$('authSignup').classList.add('active');$('authLogin').classList.remove('active');});
     $('authLogin').addEventListener('click',()=>{ $('authMode').textContent='Вход';$('authSubmit').dataset.mode='login';$('authLogin').classList.add('active');$('authSignup').classList.remove('active');});
     $('authSubmit').addEventListener('click',()=>submitAuth($('authSubmit').dataset.mode||'login'));
-    $('companyCreate').addEventListener('click',createCompany);
+    $('companyCreate').addEventListener('click',createCompany);\n    $('companyProfileSave').addEventListener('click',saveCompanyProfile);
     $('signOutBtn').addEventListener('click',signOut);
     if(client) client.auth.onAuthStateChange(()=>{setTimeout(refresh,0);});
     refresh();
