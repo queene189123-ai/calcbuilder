@@ -74,10 +74,10 @@ function openPurchase(){
    if(!vendorMap.has(v.id))vendorMap.set(v.id,{supplier:v,items:[]});
    vendorMap.get(v.id).items.push(quantities.find(q=>q.id===m.id));
   }));
-  const batchId=Date.now(),comment=$('pc').value.trim(),title='Запрос КП · '+sel.slice(0,2).map(m=>m.name).join(', ');
+  const batchId=Date.now(),comment=$('pc').value.trim(),title='Запрос КП · '+sel.slice(0,2).map(m=>m.name).join(', '),company=window.snabproGetCompany?.()||{};
   const drafts=[...vendorMap.values()].map(({supplier,items})=>{
    const subject=title;
-   const body='Добрый день!\n\nПросим подготовить коммерческое предложение на следующие позиции:\n\n'+items.map(x=>'• '+x.name+' — '+x.spec+'; количество: '+x.qty+' '+x.unit).join('\n')+'\n\nПросим указать:\n1. Цену за единицу и общую стоимость;\n2. Наличие и возможный объём поставки;\n3. Срок поставки;\n4. Стоимость и условия доставки;\n5. НДС и условия оплаты;\n6. Срок действия предложения.'+(comment?'\n\nДополнительный комментарий: '+comment:'')+'\n\nБудем благодарны за ответ на это письмо.\n\nС уважением, отдел снабжения';
+   const body='Добрый день!\n\nПросим подготовить коммерческое предложение на следующие позиции:\n\n'+items.map(x=>'• '+x.name+' — '+x.spec+'; количество: '+x.qty+' '+x.unit).join('\n')+'\n\nПросим указать:\n1. Цену за единицу и общую стоимость;\n2. Наличие и возможный объём поставки;\n3. Срок поставки;\n4. Стоимость и условия доставки;\n5. НДС и условия оплаты;\n6. Срок действия предложения.'+(comment?'\n\nДополнительный комментарий: '+comment:'')+'\n\nАдрес доставки: '+(company.address||'НЕ УКАЗАН — заполните реквизиты предприятия')+(company.delivery_notes?'\nОсобенности разгрузки/доставки: '+company.delivery_notes:'')+(company.name?'\nПредприятие: '+company.name:'')+(company.contact_person?'\nКонтактное лицо: '+company.contact_person:'')+(company.phone?'\nТелефон: '+company.phone:'')+(company.email?'\nEmail: '+company.email:'')+(company.inn?'\nИНН: '+company.inn:'')+'\n\nБудем благодарны за ответ на это письмо.\n\nС уважением, '+(company.contact_person||'отдел снабжения');
    return {id:batchId+'-'+supplier.id,batchId,to:supplier.email||'',supplier:supplier.name,subject,body,items,createdAt:new Date().toISOString(),status:'Черновик'};
   });
   emailDrafts=emailDrafts.concat(drafts);localStorage.setItem('sp_email_drafts',JSON.stringify(emailDrafts));
