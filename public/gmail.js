@@ -120,11 +120,20 @@
     } catch(e) { if(out)out.textContent="Не удалось отправить: "+e.message; }
     finally {if(b){b.disabled=false;b.textContent="Отправить письмо";}}
   }
+  window.snabproComposeEmail = function(draft){
+    $("gmailTo").value=draft.to||"";
+    $("gmailSubject").value=draft.subject||"Запрос коммерческого предложения";
+    $("gmailText").value=draft.body||"";
+    $("gmailSendStatus").textContent="Письмо подготовлено из заявки. Проверьте адресата и текст, затем нажмите «Отправить письмо».";
+    $("accountBtn")?.click();
+    $("gmailTo")?.scrollIntoView({behavior:"smooth",block:"center"});
+  };
   function escapeHtml(s){return String(s||"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
   document.addEventListener("DOMContentLoaded",()=>{
     $("gmailConnect")?.addEventListener("click",connect);
     $("gmailInbox")?.addEventListener("click",inbox);
-    $("gmailSend")?.addEventListener("click",sendMail);\n    $("gmailSupplierTemplate")?.addEventListener("click",insertSupplierRequest);
+    $("gmailSend")?.addEventListener("click",sendMail);
+    $("gmailSupplierTemplate")?.addEventListener("click",insertSupplierRequest);
     $("accountBtn")?.addEventListener("click",()=>setTimeout(status,250));
     const params=new URLSearchParams(location.search);
     if(params.get("gmail")==="connected"){history.replaceState({}, "", location.pathname);setTimeout(()=>{status();if(typeof showToast==="function")showToast("Gmail успешно подключён.");},500);}

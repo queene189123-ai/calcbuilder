@@ -121,6 +121,8 @@ function openQuoteImport(){
  const material=$('qiMaterial').value;quoteOffers.push({id:Date.now(),material,supplier,unitPrice:price,qty,delivery,vat:$('qiVat').value,lead:Number($('qiLead').value||0),unit:material.includes('Труба')?'м':'лист',spec:$('qiSpec').value||'Характеристики не подтверждены',status:'Добавлено вручную',source:'Ручной ввод'});localStorage.setItem('sp_quotes',JSON.stringify(quoteOffers));renderQuotes();toast('КП добавлено в сравнение');return true;
  });
 }
+let previewDrafts=[];
+function composeDraft(i){const d=previewDrafts[i];if(!d){toast('Черновик не найден');return}if(!window.snabproComposeEmail){toast('Почтовый модуль не загружен. Обновите страницу.');return}closeModal();window.snabproComposeEmail(d)}
 function showRequestPreview(){
  const batch=emailDrafts.length?emailDrafts[emailDrafts.length-1].batchId:null;
  let drafts=batch?emailDrafts.filter(d=>d.batchId===batch):[];
@@ -130,9 +132,10 @@ function showRequestPreview(){
   drafts=vendors.map(v=>({to:v.email||'',supplier:v.name,subject:'Запрос коммерческого предложения',body:'Добрый день! Просим предоставить коммерческое предложение на:\n'+items.filter(m=>v.cats.includes(m.cat)).map(m=>'• '+m.name+' — '+m.spec).join('\n')+'\n\nУкажите цену, наличие, срок поставки, доставку, НДС и условия оплаты.'}));
  }
  if(!drafts.length){toast('Сначала создайте закупку и выберите позиции');return}
+ previewDrafts=drafts;
  const cards=drafts.map((d,i)=>{
   const href=d.to?'mailto:'+encodeURIComponent(d.to)+'?subject='+encodeURIComponent(d.subject)+'&body='+encodeURIComponent(d.body):'';
-  return '<div class="panel" style="padding:12px;margin:10px 0"><div class="panelhead"><h3>'+eh(d.supplier)+'</h3><span class="pill">'+(d.status==='Отправлено'?'Отправлено':'Черновик')+'</span></div><p class="muted">'+(d.to?eh(d.to):'Email поставщика не указан — добавьте его в карточке поставщика')+'</p><div class="notice" style="white-space:pre-wrap">'+eh(d.body)+'</div><div class="modalfoot">'+(href?'<a class="btn primary" href="'+href+'">Открыть письмо в почте ↗</a>':'<button class="btn" disabled>Нужен email поставщика</button>')+'<button class="btn" onclick="copyDraft('+i+')">Копировать текст</button></div></div>';
+  return '<div class="panel" style="padding:12px;margin:10px 0"><div class="panelhead"><h3>'+eh(d.supplier)+'</h3><span class="pill">'+(d.status==='Отправлено'?'Отправлено':'Черновик')+'</span></div><p class="muted">'+(d.to?eh(d.to):'Email поставщика не указан — добавьте его в карточке поставщика')+'</p><div class="notice" style="white-space:pre-wrap">'+eh(d.body)+'</div><div class="modalfoot">'+(d.to?'<button class="btn primary" onclick="composeDraft('+i+')">Открыть в Gmail СнабПро</button>':'<button class="btn" disabled>Нужен email поставщика</button>')+(href?'<a class="btn" href="'+href+'">Открыть в почтовой программе ↗</a>':'')+'<button class="btn" onclick="copyDraft('+i+')">Копировать текст</button></div></div>';
  }).join('');
  modal('Запросы поставщикам','<div class="notice">Письма сформированы по каждой компании с учётом только тех материалов, которые она поставляет. Нажмите «Открыть письмо в почте» — адресат, тема и текст подставятся автоматически. Письмо отправится только после вашего нажатия «Отправить» в почтовой программе.</div>'+cards+'<div class="modalfoot"><button class="btn" onclick="closeModal()">Закрыть</button></div>',()=>true);
 }
