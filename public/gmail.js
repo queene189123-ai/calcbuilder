@@ -150,7 +150,8 @@
       try{
         await call("save_quote",{messageId:button.dataset.saveQuote,requestItemId:card.querySelector("[data-q-item]").value,unitPrice:price,currency:"RUB",deliveryCost:card.querySelector("[data-q-delivery]").value,leadTimeDays:card.querySelector("[data-q-lead]").value});
         button.textContent="Сохранено";button.style.background="#18845b";
-        showToast?.("КП добавлено в сравнение");
+        try{await window.snabproRefreshQuotes?.();showToast?.("КП сохранено и загружено в сравнение");}
+        catch(refreshError){showToast?.("КП сохранено. Обновите страницу, чтобы загрузить сравнение.");}
       }catch(error){button.disabled=false;button.textContent="Сохранить в сравнение КП";showToast?.(error.message);}
     });
     $("gmailSend")?.addEventListener("click",sendMail);
