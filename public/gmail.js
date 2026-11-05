@@ -48,6 +48,7 @@
       ["Наличие",e(x.availability||"Не указано")],["НДС",e(x.vat||"Не указано")],
       ["Оплата",e(x.payment_terms_excerpt||"Не указано")],["Доставка",e(x.delivery_excerpt||"Не указана")]
     ];
+    const quoteForm=m.requestId&&m.supplierName&&(m.requestItems||[]).length?'<div style="margin-top:10px;padding:10px;background:#f5f7fc;border-radius:8px"><b>Добавить в сравнение КП</b><select data-q-item style="width:100%;padding:8px;margin:6px 0">'+m.requestItems.map(i=>'<option value="'+e(i.id)+'">'+e(i.description)+' · '+e(i.quantity)+' '+e(i.unit)+'</option>').join("")+'</select><input data-q-price type="number" min="0.01" step="0.01" placeholder="Цена за единицу" style="width:100%;padding:8px;margin:4px 0"><input data-q-delivery type="number" min="0" step="0.01" value="0" placeholder="Доставка" style="width:100%;padding:8px;margin:4px 0"><input data-q-lead type="number" min="0" value="'+e(x.lead_time_days||"")+'" placeholder="Срок поставки, дней" style="width:100%;padding:8px;margin:4px 0"><button type="button" data-save-quote="'+e(m.id)+'" style="width:100%;padding:9px;background:#315eea;color:white;border:0;border-radius:7px">Сохранить в сравнение КП</button></div>':"";
     return '<article style="border:1px solid #e7ebf2;border-radius:10px;padding:12px;margin:10px 0">'+
       '<div style="font-weight:700">'+e(m.subject||"(без темы)")+'</div>'+
       '<div style="font-size:11px;color:#78849a;margin:4px 0">'+e(m.from||m.fromEmail)+' · '+e(m.date||"")+'</div>'+
@@ -55,6 +56,7 @@
       '<div style="font-size:11px;color:#8a6a2e;margin:4px 0">'+e(reviewLabel)+'</div>'+(request?'<div style="font-size:11px;color:#245a9b;margin:4px 0">'+request+'</div>':'')+
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12px">'+fields.map(f=>'<div><span style="color:#78849a">'+f[0]+':</span> <b>'+f[1]+'</b></div>').join("")+'</div>'+
       (attachments?'<div style="font-size:11px;margin-top:7px">Вложения: '+attachments+'</div>':"")+
+      quoteForm+
       '<div style="font-size:10px;color:#8a6a2e;margin-top:8px">Предварительное извлечение · требуется проверка</div>'+
       '<details style="margin-top:8px"><summary style="cursor:pointer;font-size:11px">Показать текст письма</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere;font:11px/1.5 inherit;max-height:220px;overflow:auto">'+e(m.bodyText||m.snippet||"Текст не найден")+'</pre></details></article>';
   }
