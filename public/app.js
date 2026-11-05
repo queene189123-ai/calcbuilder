@@ -4,11 +4,15 @@ const ds=[{id:1,name:'МеталлСнаб Север',contact:'Иван · +7 9
 const dp=[{id:1,name:'Нержавейка AISI 304 · ноябрь',items:'Нержавеющая сталь · 100 листов',vendors:3,replies:2,status:'Сравнение предложений',date:'03.11.2026'},{id:2,name:'Трубы для партии бойлеров',items:'Труба 25 мм · 300 м; труба 50 мм · 200 м',vendors:3,replies:1,status:'Ожидаем ответы',date:'02.11.2026'}];
 function get(k,d){try{return JSON.parse(localStorage.getItem(k))||JSON.parse(JSON.stringify(d))}catch(e){return JSON.parse(JSON.stringify(d))}}
 let materials=get('sp_materials',dm),suppliers=get('sp_suppliers',ds),purchases=get('sp_purchases',dp);
+let materialFolders=get('sp_material_folders',['Металл','Пластик','Трубы','Комплектующие','Изоляция']);
+materials.forEach(m=>{if(!m.folder)m.folder=m.cat||'Без папки'});
+let activeMaterialFolder='';
 let workspaceSyncTimer=null;
 function save(){
  localStorage.setItem('sp_materials',JSON.stringify(materials));
  localStorage.setItem('sp_suppliers',JSON.stringify(suppliers));
  localStorage.setItem('sp_purchases',JSON.stringify(purchases));
+ localStorage.setItem('sp_material_folders',JSON.stringify(materialFolders));
  if(window.snabproWorkspaceReady){
   clearTimeout(workspaceSyncTimer);
   workspaceSyncTimer=setTimeout(()=>syncWorkspace().catch(e=>toast('Ошибка сохранения в рабочее пространство: '+(e.message||'ошибка'))),500);
@@ -19,9 +23,12 @@ async function syncWorkspace(){
  if(!client||!company||!window.snabproWorkspaceReady)return;
  const {data:{user},error:userError}=await client.auth.getUser();
  if(userError||!user)throw new Error('Сессия не найдена');
+ const folderNames=[...new Set([...materialFolders,...materials.map(m=>m.folder||'Без папки')])];
+ materialFolders=folderNames;
+ for(let i=0;i<folderNames.length;i++){const {error}=await client.from('material_folders').upsert({company_id:company.id,name:folderNames[i],sort_order:i},{onConflict:'company_id,name'});if(error)throw error;}
  for(const m of materials){
   const price=String(m.price??'').replace(/[^0-9,.-]/g,'').replace(',','.');
-  const row={company_id:company.id,name:m.name,category:m.cat||null,specification:{text:m.spec||''},unit:m.unit||'шт.',last_price:price&&Number.isFinite(Number(price))?Number(price):null,created_by:user.id};
+  const row={company_id:company.id,name:m.name,category:m.cat||null,folder_name:m.folder||m.cat||'Без папки',specification:{text:m.spec||''},unit:m.unit||'шт.',last_price:price&&Number.isFinite(Number(price))?Number(price):null,created_by:user.id};
   if(m.dbId)row.id=m.dbId;
   const {data,error}=await client.from('materials').upsert(row).select('id').single();
   if(error)throw error;m.dbId=data.id;
@@ -69,9 +76,11 @@ document.querySelectorAll('.nav button[data-page]').forEach(b=>b.onclick=()=>go(
 function modal(title,body,fn){$('modalTitle').textContent=title;$('modalBody').innerHTML=body;$('modal').classList.add('open');$('modalSave')?.addEventListener('click',()=>{if(fn())closeModal()})}
 function closeModal(){$('modal').classList.remove('open')}
 $('modal').addEventListener('click',e=>{if(e.target===$('modal'))closeModal()});
-function openMaterial(){modal('Новая позиция справочника','<div class="formgrid"><div class="field"><label>Название</label><input id="mn" placeholder="Лист нержавейки"></div><div class="field"><label>Категория</label><select id="mc"><option>Металл</option><option>Пластик</option><option>Трубы</option><option>Комплектующие</option><option>Изоляция</option></select></div><div class="field full"><label>Характеристики</label><input id="ms" placeholder="Марка, размеры, толщина, диаметр"></div><div class="field"><label>Единица закупки</label><input id="mu" placeholder="лист, метр, шт."></div><div class="field"><label>Последняя цена</label><input id="mp" placeholder="8500 ₽"></div></div><div class="modalfoot"><button class="btn" onclick="closeModal()">Отмена</button><button class="btn primary" id="modalSave">Добавить</button></div>',()=>{let n=$('mn').value.trim();if(!n){toast('Введите название');return false}materials.push({id:Date.now(),name:n,cat:$('mc').value,spec:$('ms').value,unit:$('mu').value||'шт.',price:$('mp').value||'—',sup:0});save();renderAll();toast('Позиция добавлена');return true})}
+function openMaterial(){modal('Новая позиция справочника','<div class="formgrid"><div class="field"><label>Название</label><input id="mn" placeholder="Лист нержавейки"></div><div class="field"><label>Категория для поставщиков</label><select id="mc"><option>Металл</option><option>Пластик</option><option>Трубы</option><option>Комплектующие</option><option>Изоляция</option></select></div><div class="field"><label>Папка</label><select id="mf">'+folderOptions()+'</select></div><div class="field full"><label>Характеристики</label><input id="ms" placeholder="Марка, размеры, толщина, диаметр"></div><div class="field"><label>Единица закупки</label><input id="mu" placeholder="лист, метр, шт."></div><div class="field"><label>Последняя цена</label><input id="mp" placeholder="8500 ₽"></div></div><div class="modalfoot"><button class="btn" onclick="closeModal()">Отмена</button><button class="btn primary" id="modalSave">Добавить</button></div>',()=>{let n=$('mn').value.trim();if(!n){toast('Введите название');return false}materials.push({id:Date.now(),name:n,cat:$('mc').value,folder:$('mf').value||'Без папки',spec:$('ms').value,unit:$('mu').value||'шт.',price:$('mp').value||'—',sup:0});save();renderAll();toast('Позиция добавлена');return true})}
 function openSupplier(){modal('Новый поставщик','<div class="formgrid"><div class="field"><label>Компания</label><input id="sn" placeholder="ООО Поставщик"></div><div class="field"><label>Категория</label><select id="sc"><option>Металл</option><option>Пластик</option><option>Трубы</option><option>Комплектующие</option><option>Изоляция</option></select></div><div class="field"><label>Email</label><input id="se" placeholder="sales@company.ru"></div><div class="field"><label>Контакт</label><input id="st" placeholder="Телефон / контактное лицо"></div><div class="field full"><label>Регион</label><input id="sr" value="Санкт-Петербург"></div></div><div class="modalfoot"><button class="btn" onclick="closeModal()">Отмена</button><button class="btn primary" id="modalSave">Сохранить</button></div>',()=>{let n=$('sn').value.trim();if(!n){toast('Введите название компании');return false}suppliers.push({id:Date.now(),name:n,email:$('se').value,contact:$('st').value,region:$('sr').value,cats:[$('sc').value],rating:'Новый',lead:'Неизвестно'});save();renderAll();toast('Поставщик добавлен');return true})}
-function renderMaterials(){let q=($('matSearch')?.value||'').toLowerCase(),c=$('matCategory')?.value||'',a=materials.filter(m=>(!c||m.cat===c)&&(m.name+' '+m.spec).toLowerCase().includes(q));$('materialsBody').innerHTML=a.map(m=>'<tr><td><input class="check" type="checkbox" '+(m.selected?'checked':'')+' onchange="setSelected('+m.id+',this.checked)"></td><td><span class="materialicon">▤</span><span class="materialname">'+eh(m.name)+'</span></td><td class="muted">'+eh(m.spec)+'</td><td>'+eh(m.unit)+'</td><td class="strong">'+eh(m.price)+'</td><td>'+m.sup+'</td></tr>').join('')||'<tr><td colspan="6" class="empty">Материалы не найдены</td></tr>';$('selectedCount').textContent=materials.filter(m=>m.selected).length}
+function folderOptions(selected=''){return [...new Set([...materialFolders,...materials.map(m=>m.folder||'Без папки')])].map(n=>'<option value="'+eh(n)+'" '+(n===selected?'selected':'')+'>'+eh(n)+'</option>').join('')}
+function setMaterialFolder(id,name){const m=materials.find(x=>x.id===id);if(!m)return;m.folder=name;save();renderMaterials();toast('Папка материала обновлена')}
+function renderMaterials(){let q=($('matSearch')?.value||'').toLowerCase(),c=$('matCategory')?.value||'',folder=$('matFolderFilter')?.value||'',a=materials.filter(m=>(!c||m.cat===c)&&(!folder||m.folder===folder)&&(m.name+' '+m.spec).toLowerCase().includes(q));$('materialsBody').innerHTML=a.map(m=>'<tr><td><input class="check" type="checkbox" '+(m.selected?'checked':'')+' onchange="setSelected('+m.id+',this.checked)"></td><td><span class="materialicon">▤</span><span class="materialname">'+eh(m.name)+'</span></td><td class="muted">'+eh(m.spec)+'</td><td><select class="folder-inline" aria-label="Папка материала" onchange="setMaterialFolder('+m.id+',this.value)">'+folderOptions(m.folder)+'</select></td><td>'+eh(m.unit)+'</td><td class="strong">'+eh(m.price)+'</td><td>'+m.sup+'</td></tr>').join('')||'<tr><td colspan="7" class="empty">Материалы не найдены</td></tr>';$('selectedCount').textContent=materials.filter(m=>m.selected).length;const filter=$('matFolderFilter');if(filter){const v=filter.value;filter.innerHTML='<option value="">Все папки</option>'+folderOptions();filter.value=v}}
 function setSelected(id,v){let m=materials.find(x=>x.id===id);m.selected=v;save();renderMaterials()}
 function selectAll(){materials.forEach(m=>m.selected=true);save();renderMaterials()}
 function clearSelection(){materials.forEach(m=>m.selected=false);save();renderMaterials()}
@@ -83,8 +92,9 @@ function renderDashboard(){$('statPurchases').textContent=purchases.filter(p=>p.
 function renderAll(){renderMaterials();renderSuppliers();renderPurchases();renderDashboard();$('recommendations').innerHTML=recHtml(recs);renderQuotes()}
 function openPurchase(){
  const items=materials;
- let rows=items.map(m=>'<div class="field full" style="border:1px solid var(--line);padding:9px;border-radius:8px"><label><input type="checkbox" class="pcheck" data-id="'+m.id+'" '+(m.selected?'checked':'')+'> '+eh(m.name)+' · '+eh(m.spec)+'</label><div class="field"><label>Количество ('+eh(m.unit)+')</label><input type="number" min="1" value="'+(m.cat==='Трубы'?300:m.cat==='Металл'?50:100)+'" id="qty'+m.id+'"></div><small class="muted">Поставщики: '+(suppliers.filter(s=>s.cats.includes(m.cat)).map(s=>eh(s.name)).join(', ')||'не назначены')+'</small></div>').join('');
- modal('Сформировать закупку','<div class="notice">Отметьте только те материалы, которые действительно нужно заказать. Ничего не выбрано автоматически. Укажите количество и назначение закупки.</div><div class="formgrid"><div class="field full"><label>Что закупаем / для чего нужна закупка</label><input id="pt" placeholder="Например: комплектующие для партии бойлеров № 24"></div>'+rows+'<div class="field full"><label>Комментарий поставщикам</label><textarea id="pc" rows="2" style="width:100%;border:1px solid var(--line);border-radius:8px;padding:9px" placeholder="Срок, доставка, оплата, требования…"></textarea></div></div><div class="notice">После создания появятся черновики писем. Проверьте их и нажмите «Отправить» в Gmail.</div><div class="modalfoot"><button class="btn" onclick="closeModal()">Отмена</button><button class="btn primary" id="modalSave">Создать закупку и письма</button></div>',()=>{
+ const groups=[...new Set([...materialFolders,...items.map(m=>m.folder||'Без папки')])].map(name=>({name,items:items.filter(m=>(m.folder||'Без папки')===name)})).filter(g=>g.items.length);
+ let rows=groups.map(g=>'<details class="purchase-folder"><summary><span>'+eh(g.name)+'</span><small>'+g.items.length+' поз.</small></summary><div class="purchase-folder-items">'+g.items.map(m=>'<div class="purchase-material"><label class="purchase-material-name"><input type="checkbox" class="pcheck" data-id="'+m.id+'" '+(m.selected?'checked':'')+'> <span>'+eh(m.name)+'</span><small>'+eh(m.spec)+'</small></label><div class="purchase-material-meta"><label>Количество ('+eh(m.unit)+')<input type="number" min="1" value="'+(m.cat==='Трубы'?300:m.cat==='Металл'?50:100)+'" id="qty'+m.id+'"></label><small>Поставщики: '+(suppliers.filter(s=>s.cats.includes(m.cat)).map(s=>eh(s.name)).join(', ')||'не назначены')+'</small></div></div>').join('')+'</div></details>').join('');
+ modal('Сформировать закупку','<div class="notice">Откройте нужную папку и отметьте позиции. Можно выбрать материалы из нескольких папок.</div><div class="formgrid"><div class="field full"><label>Что закупаем / для чего нужна закупка</label><input id="pt" placeholder="Например: комплектующие для партии бойлеров № 24"></div><div class="field full"><div class="folder-picker-trigger">Выберите материалы по папкам</div>'+rows+'</div><div class="field full"><label>Комментарий поставщикам</label><textarea id="pc" rows="2" style="width:100%;border:1px solid var(--line);border-radius:8px;padding:9px" placeholder="Срок, доставка, оплата, требования…"></textarea></div></div><div class="notice">После создания появятся черновики писем. Проверьте их и нажмите «Отправить» в Gmail.</div><div class="modalfoot"><button class="btn" onclick="closeModal()">Отмена</button><button class="btn primary" id="modalSave">Создать закупку и письма</button></div>',()=>{
   let ids=[...document.querySelectorAll('.pcheck:checked')].map(x=>+x.dataset.id),sel=materials.filter(m=>ids.includes(m.id));
   if(!sel.length){toast('Сначала отметьте материалы, которые нужно закупить');return false}
   const quantities=sel.map(m=>({id:m.id,name:m.name,spec:m.spec,qty:Math.max(1,Number($('qty'+m.id).value)||1),unit:m.unit,cat:m.cat}));
@@ -252,17 +262,21 @@ window.snabproLoadWorkspace=async function(company){
  const client=window.snabproClient;if(!client||!company)return;
  window.snabproWorkspaceReady=false;
  try{
-  const [m,s,p,d,links]=await Promise.all([
+  const [m,s,p,d,links,folders]=await Promise.all([
    client.from('materials').select('*').eq('company_id',company.id).order('created_at',{ascending:true}),
    client.from('suppliers').select('*').eq('company_id',company.id).order('created_at',{ascending:true}),
    client.from('purchase_requests').select('*').eq('company_id',company.id).order('created_at',{ascending:false}),
    client.from('quote_documents').select('id,original_filename,extraction_status,created_at').eq('company_id',company.id).order('created_at',{ascending:false}),
-   client.from('purchase_request_suppliers').select('request_id,status').eq('company_id',company.id)
+   client.from('purchase_request_suppliers').select('request_id,status').eq('company_id',company.id),
+   client.from('material_folders').select('id,name,sort_order').eq('company_id',company.id).order('sort_order').order('name')
   ]);
-  if(m.error)throw m.error;if(s.error)throw s.error;if(p.error)throw p.error;if(d.error)throw d.error;if(links.error)throw links.error;
+  if(m.error)throw m.error;if(s.error)throw s.error;if(p.error)throw p.error;if(d.error)throw d.error;if(links.error)throw links.error;if(folders.error)throw folders.error;
   const linkStatuses=new Map();
   (links.data||[]).forEach(link=>{const a=linkStatuses.get(link.request_id)||[];a.push(link.status);linkStatuses.set(link.request_id,a);});
-  materials=(m.data||[]).map((x,i)=>({id:i+1,dbId:x.id,name:x.name,cat:x.category||'Без категории',spec:x.specification?.text||'',unit:x.unit||'шт.',price:x.last_price==null?'—':money(x.last_price),sup:0}));
+  materials=(m.data||[]).map((x,i)=>({id:i+1,dbId:x.id,name:x.name,cat:x.category||'Без категории',folder:x.folder_name||x.category||'Без папки',spec:x.specification?.text||'',unit:x.unit||'шт.',price:x.last_price==null?'—':money(x.last_price),sup:0}));
+  materialFolders=(folders.data||[]).map(x=>x.name);
+  [...new Set(materials.map(x=>x.folder))].forEach(n=>{if(!materialFolders.includes(n))materialFolders.push(n)});
+  if(!materialFolders.length)materialFolders=['Металл','Пластик','Трубы','Комплектующие','Изоляция'];
   suppliers=(s.data||[]).map((x,i)=>({id:i+1,dbId:x.id,name:x.name,email:x.email||'',contact:x.contact||x.phone||'',region:x.region||'',cats:x.categories||[],rating:x.rating||'—',lead:x.lead_time||'Не указан'}));
   purchases=(p.data||[]).map((x,i)=>({id:i+1,dbId:x.id,name:x.title,items:x.details?.items||'',vendors:x.details?.vendors||0,replies:x.details?.replies||0,status:x.status==='completed'?'Завершена':x.status==='cancelled'?'Отменена':(linkStatuses.get(x.id)?.length&&linkStatuses.get(x.id).every(v=>v==='sent')?'Ожидаем ответы':'Черновики готовы'),date:x.details?.date||new Date(x.created_at).toLocaleDateString('ru-RU')}));
   materials.forEach(m=>m.sup=suppliers.filter(v=>v.cats.includes(m.cat)).length);
