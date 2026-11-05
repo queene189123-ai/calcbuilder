@@ -38,11 +38,30 @@ async function syncWorkspace(){
   if(p.dbId)row.id=p.dbId;
   const {data,error}=await client.from('purchase_requests').upsert(row).select('id').single();
   if(error)throw error;p.dbId=data.id;
+  if(Array.isArray(p.requestItems)&&p.requestItems.length){
+   const {error:delError}=await client.from('purchase_request_items').delete().eq('company_id',company.id).eq('request_id',p.dbId);
+   if(delError)throw delError;
+   const itemRows=p.requestItems.map(x=>({company_id:company.id,request_id:p.dbId,material_id:materials.find(m=>m.id===x.id)?.dbId||null,description:x.name,specification:{text:x.spec||'',category:x.cat||''},quantity:x.qty,unit:x.unit}));
+   const {error:itemError}=await client.from('purchase_request_items').insert(itemRows);
+   if(itemError)throw itemError;
+  }
+  if(p.draftBatch){
+   const batchDrafts=emailDrafts.filter(d=>d.batchId===p.draftBatch);
+   for(const d of batchDrafts){
+    const supplier=suppliers.find(s=>s.id===d.supplierLocalId);
+    const link={company_id:company.id,request_id:p.dbId,supplier_id:supplier?.dbId||null,supplier_email:d.to,subject_token:d.subjectToken,status:d.status==='Отправлено'?'sent':'draft'};
+    const {error:linkError}=await client.from('purchase_request_suppliers').upsert(link,{onConflict:'company_id,subject_token'});
+    if(linkError)throw linkError;
+    d.requestId=p.dbId;
+   }
+  }
  }
  localStorage.setItem('sp_materials',JSON.stringify(materials));
  localStorage.setItem('sp_suppliers',JSON.stringify(suppliers));
  localStorage.setItem('sp_purchases',JSON.stringify(purchases));
+ localStorage.setItem('sp_email_drafts',JSON.stringify(emailDrafts));
 }
+window.snabproEnsureWorkspaceSaved=async()=>{clearTimeout(workspaceSyncTimer);await syncWorkspace();return true};
 
 function toast(t){$('toast').textContent=t;$('toast').style.display='block';clearTimeout(window.tt);window.tt=setTimeout(()=>$('toast').style.display='none',3500)}
 function go(p){document.querySelectorAll('.section').forEach(x=>x.classList.toggle('active',x.id===p));document.querySelectorAll('.nav button[data-page]').forEach(x=>x.classList.toggle('active',x.dataset.page===p));$('crumb').textContent=({dashboard:'Обзор',materials:'Мои материалы',suppliers:'Поставщики',purchases:'Закупки',quotes:'КП и сравнение',market:'Поиск поставщиков',saving:'Оптимизация расходов',report:'Отчёт руководителю',history:'История цен'})[p];renderAll();window.scrollTo(0,0)}
@@ -76,12 +95,13 @@ function openPurchase(){
   }));
   const batchId=Date.now(),comment=$('pc').value.trim(),title='Запрос КП · '+sel.slice(0,2).map(m=>m.name).join(', '),company=window.snabproGetCompany?.()||{};
   const drafts=[...vendorMap.values()].map(({supplier,items})=>{
-   const subject=title;
+   const subjectToken='SP-'+batchId.toString(36).toUpperCase()+'-'+String(supplier.id);
+   const subject=title+' ['+subjectToken+']';
    const body='Добрый день!\n\nПросим подготовить коммерческое предложение на следующие позиции:\n\n'+items.map(x=>'• '+x.name+' — '+x.spec+'; количество: '+x.qty+' '+x.unit).join('\n')+'\n\nПросим указать:\n1. Цену за единицу и общую стоимость;\n2. Наличие и возможный объём поставки;\n3. Срок поставки;\n4. Стоимость и условия доставки;\n5. НДС и условия оплаты;\n6. Срок действия предложения.'+(comment?'\n\nДополнительный комментарий: '+comment:'')+'\n\nАдрес доставки: '+(company.address||'НЕ УКАЗАН — заполните реквизиты предприятия')+(company.delivery_notes?'\nОсобенности разгрузки/доставки: '+company.delivery_notes:'')+(company.name?'\nПредприятие: '+company.name:'')+(company.contact_person?'\nКонтактное лицо: '+company.contact_person:'')+(company.phone?'\nТелефон: '+company.phone:'')+(company.email?'\nEmail: '+company.email:'')+(company.inn?'\nИНН: '+company.inn:'')+'\n\nБудем благодарны за ответ на это письмо.\n\nС уважением, '+(company.contact_person||'отдел снабжения');
-   return {id:batchId+'-'+supplier.id,batchId,to:supplier.email||'',supplier:supplier.name,subject,body,items,createdAt:new Date().toISOString(),status:'Черновик'};
+   return {id:batchId+'-'+supplier.id,batchId,supplierLocalId:supplier.id,subjectToken,to:supplier.email||'',supplier:supplier.name,subject,body,items,createdAt:new Date().toISOString(),status:'Черновик'};
   });
   emailDrafts=emailDrafts.concat(drafts);localStorage.setItem('sp_email_drafts',JSON.stringify(emailDrafts));
-  purchases.unshift({id:batchId,name:title,items:quantities.map(x=>x.name+' · '+x.qty+' '+x.unit).join('; '),vendors:vendorMap.size,replies:0,status:'Черновики готовы',date:new Date().toLocaleDateString('ru-RU'),draftBatch:batchId,comment});
+  purchases.unshift({id:batchId,name:title,items:quantities.map(x=>x.name+' · '+x.qty+' '+x.unit).join('; '),vendors:vendorMap.size,replies:0,status:'Черновики готовы',date:new Date().toLocaleDateString('ru-RU'),draftBatch:batchId,comment,requestItems:quantities,requestSuppliers:drafts.map(d=>({supplierLocalId:d.supplierLocalId,email:d.to,subjectToken:d.subjectToken}))});
   save();renderAll();toast('Закупка создана. Подготовлено писем: '+drafts.length);go('purchases');return true;
  });
 }
@@ -122,7 +142,7 @@ function openQuoteImport(){
  });
 }
 let previewDrafts=[];
-function composeDraft(i){const d=previewDrafts[i];if(!d){toast('Черновик не найден');return}if(!window.snabproComposeEmail){toast('Почтовый модуль не загружен. Обновите страницу.');return}closeModal();window.snabproComposeEmail(d)}
+async function composeDraft(i){const d=previewDrafts[i];if(!d){toast('Черновик не найден');return}try{await window.snabproEnsureWorkspaceSaved?.()}catch(e){toast('Не удалось сохранить заявку: '+e.message);return}if(!window.snabproComposeEmail){toast('Почтовый модуль не загружен. Обновите страницу.');return}closeModal();window.snabproComposeEmail(d)}
 function showRequestPreview(){
  const batch=emailDrafts.length?emailDrafts[emailDrafts.length-1].batchId:null;
  let drafts=batch?emailDrafts.filter(d=>d.batchId===batch):[];
