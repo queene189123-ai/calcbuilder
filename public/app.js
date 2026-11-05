@@ -187,13 +187,25 @@ async function loadCompanyQuotes(company){
  const quoteById=new Map((q.data||[]).map(x=>[x.id,x]));
  const itemById=new Map((ri.data||[]).map(x=>[x.id,x]));
  const supplierById=new Map((sr.data||[]).map(x=>[x.id,x]));
+ // Общая доставка распределяется между строками КП пропорционально стоимости товаров.
+ const goodsTotalByQuote=new Map();
+ (qi.data||[]).forEach(item=>{
+  const requestItem=item.request_item_id?itemById.get(item.request_item_id):null;
+  const qty=Number(item.quantity??requestItem?.quantity)||1;
+  const lineTotal=(Number(item.unit_price)||0)*qty;
+  goodsTotalByQuote.set(item.quote_id,(goodsTotalByQuote.get(item.quote_id)||0)+lineTotal);
+ });
  quoteOffers=(qi.data||[]).flatMap(item=>{
   const quote=quoteById.get(item.quote_id);if(!quote)return [];
   const requestItem=item.request_item_id?itemById.get(item.request_item_id):null;
   const spec=item.specification?.text||requestItem?.specification?.text||'';
   const material=String(item.description||requestItem?.description||'Позиция закупки')+(spec?' · '+spec:'');
   const supplier=supplierById.get(quote.supplier_id);
-  return [{id:item.id,dbQuoteId:quote.id,material,supplier:supplier?.name||'Поставщик',unitPrice:Number(item.unit_price)||0,qty:Number(item.quantity??requestItem?.quantity)||1,delivery:Number(quote.delivery_cost)||0,vat:item.vat_included===true?'НДС включён':item.vat_included===false?'Без НДС':'Не указано',lead:Number(item.specification?.lead_time_days)||Number(quote.lead_time_days)||0,unit:item.unit||requestItem?.unit||'шт.',spec:spec||'Характеристики не указаны',status:'Получено из почты',source:item.source_excerpt||quote.notes||'Письмо поставщика',currency:quote.currency||'RUB'}];
+  const qty=Number(item.quantity??requestItem?.quantity)||1;
+  const itemGoodsTotal=(Number(item.unit_price)||0)*qty;
+  const quoteGoodsTotal=goodsTotalByQuote.get(quote.id)||0;
+  const deliveryShare=quoteGoodsTotal>0?(Number(quote.delivery_cost)||0)*itemGoodsTotal/quoteGoodsTotal:0;
+  return [{id:item.id,dbQuoteId:quote.id,material,supplier:supplier?.name||'Поставщик',unitPrice:Number(item.unit_price)||0,qty,delivery:Number(deliveryShare.toFixed(2)),vat:item.vat_included===true?'НДС включён':item.vat_included===false?'Без НДС':'Не указано',lead:Number(item.specification?.lead_time_days)||Number(quote.lead_time_days)||0,unit:item.unit||requestItem?.unit||'шт.',spec:spec||'Характеристики не указаны',status:'Получено из почты',source:item.source_excerpt||quote.notes||'Письмо поставщика',currency:quote.currency||'RUB'}];
  });
  localStorage.setItem('sp_quotes',JSON.stringify(quoteOffers));
  syncQuoteMaterialOptions(true);renderQuotes();
