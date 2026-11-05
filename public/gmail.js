@@ -17,6 +17,19 @@
     if (!r.ok) throw new Error(data.error || "Ошибка почтового сервиса.");
     return data;
   }
+  async function processFile(messageId,filename){
+    const client=window.snabproClient;
+    const {data:{session}}=await client.auth.getSession();
+    if(!session)throw new Error("Сначала войдите в СнабПро.");
+    const response=await fetch("https://tdewylpxanviyhdwdnci.supabase.co/functions/v1/gmail-attachment-reader",{
+      method:"POST",
+      headers:{"Content-Type":"application/json","Authorization":"Bearer "+session.access_token,"apikey":window.SNABPRO_CONFIG.supabaseKey},
+      body:JSON.stringify({companyId:companyId(),messageId,filename})
+    });
+    const result=await response.json();
+    if(!response.ok)throw new Error(result.error||"Ошибка обработки вложения.");
+    return result;
+  }
   async function status() {
     if (!companyId()) { if(statusEl()) statusEl().textContent="Сначала войдите и выберите предприятие."; return; }
     try {
@@ -141,6 +154,20 @@
     $("gmailConnect")?.addEventListener("click",connect);
     $("gmailInbox")?.addEventListener("click",inbox);
     $("gmailInboxList")?.addEventListener("click",async function(ev){
+      const fileButton=ev.target.closest("[data-process-file]");
+      if(fileButton){
+        fileButton.disabled=true;fileButton.textContent="Обрабатываем…";
+        try{
+          const result=await processFile(fileButton.dataset.processFile,fileButton.dataset.fileName);
+          const card=fileButton.closest("article");
+          let panel=card.querySelector("[data-file-result]");
+          if(!panel){panel=document.createElement("pre");panel.dataset.fileResult="1";panel.style.cssText="white-space:pre-wrap;overflow-wrap:anywhere;max-height:240px;overflow:auto;background:#f5f7fc;padding:10px;border-radius:8px;margin-top:8px;font-size:11px";fileButton.parentElement.appendChild(panel);}
+          const prices=result.extracted?.price_candidates||[];
+          panel.textContent="Документ сохранён · "+result.extractionStatus+"\\nЦены-кандидаты: "+(prices.map(x=>x.amount+" "+x.currency).join(", ")||"не найдены")+"\\n"+(result.extractedText||result.extractionError||"Текст не извлечён");
+          fileButton.textContent=result.extractionStatus==="review"?"Извлечено · проверить":"Сохранено";
+        }catch(error){fileButton.disabled=false;fileButton.textContent="Повторить";showToast?.(error.message);}
+        return;
+      }
       const button=ev.target.closest("[data-save-quote]");
       if(!button)return;
       const card=button.closest("article");
