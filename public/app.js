@@ -70,6 +70,7 @@ async function syncWorkspace(){
 }
 window.snabproEnsureWorkspaceSaved=async()=>{clearTimeout(workspaceSyncTimer);await syncWorkspace();return true};
 
+document.addEventListener('click',e=>{const b=e.target.closest('[data-review-document]');if(b){b.disabled=true;openDocumentReview(b.dataset.reviewDocument).catch(err=>toast(err.message)).finally(()=>{b.disabled=false;});}});
 function toast(t){$('toast').textContent=t;$('toast').style.display='block';clearTimeout(window.tt);window.tt=setTimeout(()=>$('toast').style.display='none',3500)}
 function go(p){document.querySelectorAll('.section').forEach(x=>x.classList.toggle('active',x.id===p));document.querySelectorAll('.nav button[data-page]').forEach(x=>x.classList.toggle('active',x.dataset.page===p));$('crumb').textContent=({dashboard:'Обзор',materials:'Мои материалы',suppliers:'Поставщики',purchases:'Закупки',quotes:'КП и сравнение',market:'Поиск поставщиков',saving:'Оптимизация расходов',report:'Отчёт руководителю',history:'История цен'})[p];renderAll();window.scrollTo(0,0)}
 document.querySelectorAll('.nav button[data-page]').forEach(b=>b.onclick=()=>go(b.dataset.page));
@@ -246,9 +247,68 @@ async function renderUploadedDocuments(prefetched){
  const company=window.snabproGetCompany?.(),client=window.snabproClient;
  if(!company||!client){el.innerHTML='<div class="empty">Войдите и выберите предприятие, чтобы видеть загруженные КП.</div>';return;}
  let docs=prefetched;
- if(!docs){const {data,error}=await client.from('quote_documents').select('id,original_filename,extraction_status,created_at').eq('company_id',company.id).order('created_at',{ascending:false});if(error){el.innerHTML='<div class="empty">Не удалось загрузить список документов.</div>';return;}docs=data||[];}
- const labels={uploaded:'Загружен · ожидает AI-обработки',processing:'Обрабатывается',review:'Нужна проверка',approved:'Проверен',failed:'Ошибка обработки'};
- el.innerHTML=docs.length?docs.map(d=>'<div class="activity"><span class="dot"></span><div><b>'+eh(d.original_filename)+'</b><small>'+eh(labels[d.extraction_status]||d.extraction_status)+' · '+new Date(d.created_at).toLocaleString('ru-RU')+'</small></div></div>').join(''):'<div class="empty">Пока нет загруженных коммерческих предложений.</div>';
+ if(!docs){const {data,error}=await client.from('quote_documents').select('id,original_filename,extraction_status,created_at,extraction_error').eq('company_id',company.id).order('created_at',{ascending:false});if(error){el.innerHTML='<div class="empty">Не удалось загрузить список документов: '+eh(error.message)+'</div>';return;}docs=data||[];}
+ const labels={uploaded:'Загружен',processing:'Обрабатывается',review:'Распознано · нужна проверка',approved:'Добавлен в сравнение',failed:'Не удалось извлечь данные'};
+ el.innerHTML=docs.length?docs.map(d=>'<div class="activity" style="align-items:center"><span class="dot"></span><div style="flex:1;min-width:0"><b>'+eh(d.original_filename)+'</b><small>'+eh(labels[d.extraction_status]||d.extraction_status)+' · '+new Date(d.created_at).toLocaleString('ru-RU')+(d.extraction_error?' · '+eh(d.extraction_error):'')+'</small></div>'+(d.extraction_status!=='approved'?'<button class="btn" type="button" data-review-document="'+eh(d.id)+'">Проверить и добавить КП</button>':'')+'</div>').join(''):'<div class="empty">Пока нет загруженных коммерческих предложений.</div>';
+}
+async function openDocumentReview(documentId){
+ const client=window.snabproClient,company=window.snabproGetCompany?.();
+ if(!client||!company?.id){toast('Сначала войдите в предприятие');return;}
+ const [docRes,supplierRes,requestRes,itemRes]=await Promise.all([
+  client.from('quote_documents').select('*').eq('id',documentId).eq('company_id',company.id).single(),
+  client.from('suppliers').select('id,name,email').eq('company_id',company.id).order('name'),
+  client.from('purchase_requests').select('id,title,status').eq('company_id',company.id).order('created_at',{ascending:false}),
+  client.from('purchase_request_items').select('id,request_id,description,specification,quantity,unit').eq('company_id',company.id)
+ ]);
+ for(const r of [docRes,supplierRes,requestRes,itemRes])if(r.error){toast('Не удалось открыть проверку: '+r.error.message);return;}
+ const doc=docRes.data,ex=doc.extracted_data||{},candidate=(ex.price_candidates||[])[0]||{};
+ const suppliersList=supplierRes.data||[],requests=requestRes.data||[],items=itemRes.data||[];
+ const initialRequest=doc.request_id||requests[0]?.id||'';
+ const requestItems=items.filter(x=>x.request_id===initialRequest);
+ const initialItem=requestItems[0];
+ const supplierOptions=suppliersList.map(x=>'<option value="'+eh(x.id)+'" '+(x.id===doc.supplier_id?'selected':'')+'>'+eh(x.name)+'</option>').join('');
+ const requestOptions=requests.map(x=>'<option value="'+eh(x.id)+'" '+(x.id===initialRequest?'selected':'')+'>'+eh(x.title)+'</option>').join('');
+ const itemOptions=list=>list.map(x=>'<option value="'+eh(x.id)+'">'+eh(x.description)+' · '+eh(x.quantity)+' '+eh(x.unit)+'</option>').join('');
+ const spec=(initialItem?.specification?.text||ex.specification||'');
+ const price=Number(candidate.amount)||'';
+ const currency=candidate.currency||'RUB';
+ const textPreview=ex.text_preview||'';
+ modal('Проверка коммерческого предложения',
+  '<div class="notice">Проверьте распознанные значения. Ничего не попадёт в сравнение, пока вы не нажмёте «Подтвердить и добавить».</div>'+
+  '<div class="formgrid">'+
+  '<div class="field full"><label>Поставщик</label><select id="drSupplier">'+supplierOptions+'</select></div>'+
+  '<div class="field full"><label>Закупка</label><select id="drRequest">'+requestOptions+'</select></div>'+
+  '<div class="field full"><label>Позиция закупки</label><select id="drItem">'+itemOptions(requestItems)+'</select></div>'+
+  '<div class="field"><label>Цена за единицу</label><input id="drPrice" type="number" min="0.0001" step="0.01" value="'+eh(price)+'" placeholder="Введите цену"></div>'+
+  '<div class="field"><label>Валюта</label><select id="drCurrency"><option '+(currency==='RUB'?'selected':'')+' value="RUB">RUB · ₽</option><option '+(currency==='USD'?'selected':'')+' value="USD">USD · $</option><option '+(currency==='EUR'?'selected':'')+' value="EUR">EUR · €</option></select></div>'+
+  '<div class="field"><label>Доставка, ₽</label><input id="drDelivery" type="number" min="0" step="0.01" value="0"></div>'+
+  '<div class="field"><label>Срок поставки, дней</label><input id="drLead" type="number" min="0" value="'+eh(ex.lead_time_days||'')+'"></div>'+
+  '<div class="field"><label>НДС</label><select id="drVat"><option value="">Не указано</option><option value="yes" '+(ex.vat==='С НДС'?'selected':'')+'>Включён</option><option value="no" '+(ex.vat==='Без НДС'?'selected':'')+'>Без НДС</option></select></div>'+
+  '<div class="field"><label>Наличие</label><input id="drAvailability" value="'+eh(ex.availability||'')+'" placeholder="Например, в наличии"></div>'+
+  '<div class="field full"><label>Характеристики / комментарий</label><input id="drSpec" value="'+eh(spec)+'" placeholder="Проверьте марку, размер, толщину"></div>'+
+  '<div class="field full"><label>Фрагмент документа</label><textarea readonly rows="6" style="width:100%;font:12px/1.5 inherit">'+eh(textPreview.slice(0,5000)||doc.extraction_error||'Текст документа не извлечён. Заполните данные вручную.')+'</textarea></div>'+
+  '</div><div class="modalfoot"><button class="btn" type="button" onclick="closeModal()">Отмена</button><button class="btn primary" type="button" id="drSubmit">Подтвердить и добавить в сравнение</button></div>',()=>false);
+ $('drRequest').addEventListener('change',()=>{
+  const list=items.filter(x=>x.request_id===$('drRequest').value);
+  $('drItem').innerHTML=itemOptions(list);
+ });
+ $('drSubmit').addEventListener('click',async()=>{
+  const supplierId=$('drSupplier').value,requestId=$('drRequest').value,itemId=$('drItem').value,price=Number($('drPrice').value),delivery=Number($('drDelivery').value||0),lead=Number($('drLead').value||0);
+  if(!supplierId||!requestId||!itemId||!(price>0)||delivery<0||lead<0){toast('Выберите поставщика, закупку, позицию и укажите корректную цену');return;}
+  const item=items.find(x=>x.id===itemId);
+  if(!item||item.request_id!==requestId){toast('Позиция не относится к выбранной закупке');return;}
+  const btn=$('drSubmit');btn.disabled=true;btn.textContent='Сохраняем…';
+  const quote={company_id:company.id,request_id:requestId,supplier_id:supplierId,document_id:doc.id,currency:$('drCurrency').value,delivery_cost:delivery,lead_time_days:lead||null,notes:'Проверено вручную по документу '+doc.original_filename};
+  const {data:quoteRow,error:quoteError}=await client.from('supplier_quotes').insert(quote).select('id').single();
+  if(quoteError){btn.disabled=false;btn.textContent='Подтвердить и добавить в сравнение';toast('Не удалось сохранить КП: '+quoteError.message);return;}
+  const vat=$('drVat').value;
+  const quoteItem={company_id:company.id,quote_id:quoteRow.id,request_item_id:itemId,description:item.description,specification:{text:$('drSpec').value.trim()},quantity:item.quantity,unit:item.unit,unit_price:price,vat_included:vat===''?null:vat==='yes',availability:$('drAvailability').value.trim()||null,confidence:candidate.amount?0.75:0.5,source_excerpt:textPreview.slice(0,1000)||doc.original_filename};
+  const {error:itemError}=await client.from('quote_items').insert(quoteItem);
+  if(itemError){await client.from('supplier_quotes').delete().eq('id',quoteRow.id).eq('company_id',company.id);btn.disabled=false;btn.textContent='Подтвердить и добавить в сравнение';toast('Не удалось сохранить позицию КП: '+itemError.message);return;}
+  const {error:docError}=await client.from('quote_documents').update({extraction_status:'approved'}).eq('id',doc.id).eq('company_id',company.id);
+  closeModal();await window.snabproRefreshQuotes?.();await renderUploadedDocuments();
+  toast(docError?'КП добавлено в сравнение. Статус документа не обновился.':'КП подтверждено и добавлено в сравнение.');
+ });
 }
 
 async function importQuoteFile(){
