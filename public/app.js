@@ -188,12 +188,28 @@ async function loadCompanyQuotes(company){
  const itemById=new Map((ri.data||[]).map(x=>[x.id,x]));
  const supplierById=new Map((sr.data||[]).map(x=>[x.id,x]));
  // Общая доставка распределяется между строками КП пропорционально стоимости товаров.
- const goodsTotalByQuote=new Map();
+ // Распределяем копейки методом наибольших остатков, чтобы сумма долей точно совпадала с доставкой в КП.
+ const itemsByQuote=new Map();
  (qi.data||[]).forEach(item=>{
   const requestItem=item.request_item_id?itemById.get(item.request_item_id):null;
   const qty=Number(item.quantity??requestItem?.quantity)||1;
   const lineTotal=(Number(item.unit_price)||0)*qty;
-  goodsTotalByQuote.set(item.quote_id,(goodsTotalByQuote.get(item.quote_id)||0)+lineTotal);
+  if(!itemsByQuote.has(item.quote_id))itemsByQuote.set(item.quote_id,[]);
+  itemsByQuote.get(item.quote_id).push({item,lineTotal});
+ });
+ const deliveryByItemId=new Map();
+ itemsByQuote.forEach((rows,quoteId)=>{
+  const quote=quoteById.get(quoteId),deliveryCents=Math.max(0,Math.round((Number(quote?.delivery_cost)||0)*100));
+  const goodsTotal=rows.reduce((sum,row)=>sum+row.lineTotal,0);
+  if(!goodsTotal||!deliveryCents){rows.forEach(row=>deliveryByItemId.set(row.item.id,0));return;}
+  const shares=rows.map(row=>{
+   const raw=deliveryCents*row.lineTotal/goodsTotal;
+   const cents=Math.floor(raw);
+   return {id:row.item.id,cents,fraction:raw-cents};
+  });
+  let remainder=deliveryCents-shares.reduce((sum,row)=>sum+row.cents,0);
+  shares.slice().sort((a,b)=>b.fraction-a.fraction).forEach(row=>{if(remainder>0){const target=shares.find(x=>x.id===row.id);target.cents++;remainder--;}});
+  shares.forEach(row=>deliveryByItemId.set(row.id,row.cents/100));
  });
  quoteOffers=(qi.data||[]).flatMap(item=>{
   const quote=quoteById.get(item.quote_id);if(!quote)return [];
@@ -202,10 +218,8 @@ async function loadCompanyQuotes(company){
   const material=String(item.description||requestItem?.description||'Позиция закупки')+(spec?' · '+spec:'');
   const supplier=supplierById.get(quote.supplier_id);
   const qty=Number(item.quantity??requestItem?.quantity)||1;
-  const itemGoodsTotal=(Number(item.unit_price)||0)*qty;
-  const quoteGoodsTotal=goodsTotalByQuote.get(quote.id)||0;
-  const deliveryShare=quoteGoodsTotal>0?(Number(quote.delivery_cost)||0)*itemGoodsTotal/quoteGoodsTotal:0;
-  return [{id:item.id,dbQuoteId:quote.id,material,supplier:supplier?.name||'Поставщик',unitPrice:Number(item.unit_price)||0,qty,delivery:Number(deliveryShare.toFixed(2)),vat:item.vat_included===true?'НДС включён':item.vat_included===false?'Без НДС':'Не указано',lead:Number(item.specification?.lead_time_days)||Number(quote.lead_time_days)||0,unit:item.unit||requestItem?.unit||'шт.',spec:spec||'Характеристики не указаны',status:'Получено из почты',source:item.source_excerpt||quote.notes||'Письмо поставщика',currency:quote.currency||'RUB'}];
+  const deliveryShare=deliveryByItemId.get(item.id)||0;
+  return [{id:item.id,dbQuoteId:quote.id,material,supplier:supplier?.name||'Поставщик',unitPrice:Number(item.unit_price)||0,qty,delivery:deliveryShare,vat:item.vat_included===true?'НДС включён':item.vat_included===false?'Без НДС':'Не указано',lead:Number(item.specification?.lead_time_days)||Number(quote.lead_time_days)||0,unit:item.unit||requestItem?.unit||'шт.',spec:spec||'Характеристики не указаны',status:'Получено из почты',source:item.source_excerpt||quote.notes||'Письмо поставщика',currency:quote.currency||'RUB'}];
  });
  localStorage.setItem('sp_quotes',JSON.stringify(quoteOffers));
  syncQuoteMaterialOptions(true);renderQuotes();
@@ -284,24 +298,29 @@ async function openDocumentReview(documentId){
  const itemOptions=(list,selected='')=>list.map(x=>'<option value="'+eh(x.id)+'" '+(x.id===selected?'selected':'')+'>'+eh(x.description)+' · '+eh(x.quantity)+' '+eh(x.unit)+'</option>').join('');
  const supplierOptions=suppliersList.map(x=>'<option value="'+eh(x.id)+'" '+(x.id===doc.supplier_id?'selected':'')+'>'+eh(x.name)+'</option>').join('');
  const requestOptions='<option value="'+createRequestValue+'" '+(initialRequest===createRequestValue?'selected':'')+'>＋ Создать новую закупку из этого КП</option>'+requests.map(x=>'<option value="'+eh(x.id)+'" '+(x.id===initialRequest?'selected':'')+'>'+eh(x.title)+'</option>').join('');
+ const parsedLineItems=[...textPreview.matchAll(/(\d{1,2})\s+(Лист.+?)\s+(\d+(?:[.,]\d+)?)\s+(лист|шт\.?|м|кг)\s+([\d\s]+,[0-9]{2})\s+([\d\s]+,[0-9]{2})/gi)].map(m=>({description:m[2].trim(),quantity:Number(m[3].replace(',','.')),unit:m[4],price:Number(m[5].replace(/\s/g,'').replace(',','.'))})).filter(x=>x.description&&x.quantity>0&&x.price>0);
  const priceMatches=[...textPreview.matchAll(/(?:^|\s)\d{1,2}\s+.{3,180}?\s+\d+(?:[.,]\d+)?\s+(?:лист|шт\.?|м|метр|упак\.?)\s+([\d\s]+[,.]\d{2})(?=\s|$)/gim)].map(m=>Number(m[1].replace(/\s/g,'').replace(',','.'))).filter(n=>n>0);
- const detectedRows=(textPreview.match(/\b\d+\s*(?:лист(?:ов|а)?|шт\.?|м)\b/gi)||[]).length;
- const makeRow=(index,itemId='',priceValue='')=>{
+ const detectedRows=Math.max(parsedLineItems.length,(textPreview.match(/\b\d+\s*(?:лист(?:ов|а)?|шт\.?|м)\b/gi)||[]).length);
+ const deliveryMatch=textPreview.match(/Доставка[^0-9]{0,80}([\d\s]+(?:[,.][0-9]{2})?)\s*₽/i);
+ const detectedDelivery=deliveryMatch?Number(deliveryMatch[1].replace(/\s/g,'').replace(',','.')):0;
+ const vatNo=/без\s*ндс/i.test(ex.vat||textPreview);
+ const vatYes=!vatNo&&/ндс/i.test(ex.vat||'');
+ const makeRow=(index,itemId='',priceValue='',parsed=null)=>{
   const item=items.find(x=>x.id===itemId);
   const rowItems=items.filter(x=>x.request_id===initialRequest);
   return '<div class="dr-quote-row" data-quote-row style="border:1px solid var(--line,#ddd);border-radius:10px;padding:12px;margin:10px 0">'+
    '<div class="field full"><label>Связать с позицией существующей закупки (необязательно)</label><select data-row-item><option value="">Без привязки — создать позицию из строки КП</option>'+itemOptions(rowItems,itemId)+'</select></div>'+
-   '<div class="formgrid"><div class="field full"><label>Материал / наименование позиции</label><input data-row-description value="'+eh(item?.description||'')+'" placeholder="Например, Ст3сп лист 1500×6000"></div>'+
+   '<div class="formgrid"><div class="field full"><label>Материал / наименование позиции</label><input data-row-description value="'+eh(item?.description||parsed?.description||'')+'" placeholder="Например, Ст3сп лист 1500×6000"></div>'+
    '<div class="field full"><label>Характеристики</label><input data-row-spec value="'+eh(item?.specification?.text||'')+'" placeholder="Марка, толщина, размеры, стандарт"></div>'+
-   '<div class="field"><label>Количество</label><input data-row-quantity type="number" min="0.0001" step="0.0001" value="'+eh(item?.quantity??'')+'" placeholder="20"></div>'+
-   '<div class="field"><label>Единица</label><input data-row-unit value="'+eh(item?.unit||'лист')+'" placeholder="лист, кг, м, шт."></div>'+
+   '<div class="field"><label>Количество</label><input data-row-quantity type="number" min="0.0001" step="0.0001" value="'+eh(item?.quantity??parsed?.quantity??'')+'" placeholder="20"></div>'+
+   '<div class="field"><label>Единица</label><input data-row-unit value="'+eh(item?.unit||parsed?.unit||'лист')+'" placeholder="лист, кг, м, шт."></div>'+
    '<div class="field"><label>Цена за единицу, ₽</label><input data-row-price type="number" min="0.0001" step="0.01" value="'+eh(priceValue)+'" placeholder="Введите цену"></div>'+
    '<div class="field"><label>Срок, дней</label><input data-row-lead type="number" min="0" value="'+eh(ex.lead_time_days||'')+'"></div>'+
    '<div class="field full"><label>Наличие / комментарий</label><input data-row-availability value="'+eh(ex.availability||'')+'" placeholder="Например, в наличии"></div></div>'+
    '<button class="btn" type="button" data-remove-quote-row>Удалить позицию</button></div>';
  };
  const rowCount=initialRequest===createRequestValue?Math.max(1,Math.min(12,detectedRows||priceMatches.length||1)):Math.max(1,requestItems.length);
- const initialRows=Array.from({length:rowCount},(_,i)=>makeRow(i,initialRequest===createRequestValue?'':requestItems[i]?.id||'',priceMatches[i]||'')).join('');
+ const initialRows=Array.from({length:rowCount},(_,i)=>makeRow(i,initialRequest===createRequestValue?'':requestItems[i]?.id||'',parsedLineItems[i]?.price||priceMatches[i]||'',parsedLineItems[i]||null)).join('');
  modal('Проверка коммерческого предложения',
   '<div class="notice">Можно привязать КП к существующей закупке или создать новую прямо из документа. Для каждой строки проверьте наименование, характеристики, количество и цену. Новая закупка и её позиции создадутся только после нажатия «Подтвердить».</div>'+
   '<div class="formgrid">'+
@@ -309,8 +328,8 @@ async function openDocumentReview(documentId){
   '<div class="field full"><label>Закупка</label><select id="drRequest">'+requestOptions+'</select></div>'+
   '<div class="field"><label>Название новой закупки</label><input id="drNewTitle" value="'+eh('КП · '+(suppliersList.find(x=>x.id===doc.supplier_id)?.name||doc.original_filename||'Новая закупка'))+'"></div>'+
   '<div class="field"><label>Валюта</label><select id="drCurrency"><option '+(currency==='RUB'?'selected':'')+' value="RUB">RUB · ₽</option><option '+(currency==='USD'?'selected':'')+' value="USD">USD · $</option><option '+(currency==='EUR'?'selected':'')+' value="EUR">EUR · €</option></select></div>'+
-  '<div class="field"><label>Доставка, ₽</label><input id="drDelivery" type="number" min="0" step="0.01" value="'+eh(ex.delivery_cost||'0')+'"></div>'+
-  '<div class="field"><label>НДС</label><select id="drVat"><option value="">Не указано</option><option value="yes" '+(ex.vat==='С НДС'?'selected':'')+'>Включён</option><option value="no" '+(ex.vat==='Без НДС'?'selected':'')+'>Без НДС</option></select></div>'+
+  '<div class="field"><label>Доставка, ₽</label><input id="drDelivery" type="number" min="0" step="0.01" value="'+eh(ex.delivery_cost||detectedDelivery||'0')+'"></div>'+
+  '<div class="field"><label>НДС</label><select id="drVat"><option value="">Не указано</option><option value="yes" '+(vatYes?'selected':'')+'>Включён</option><option value="no" '+(vatNo?'selected':'')+'>Без НДС</option></select></div>'+
   '<div class="field full"><label>Позиции коммерческого предложения</label><div id="drQuoteRows">'+initialRows+'</div><button class="btn" type="button" id="drAddRow">＋ Добавить позицию</button></div>'+
   '<div class="field full"><label>Фрагмент документа</label><textarea readonly rows="7" style="width:100%;font:12px/1.5 inherit">'+eh(textPreview.slice(0,7000)||doc.extraction_error||'Текст документа не извлечён. Заполните данные вручную.')+'</textarea></div>'+
   '</div><div class="modalfoot"><button class="btn" type="button" onclick="closeModal()">Отмена</button><button class="btn primary" type="button" id="drSubmit">Подтвердить и добавить в сравнение</button></div>',()=>false);
