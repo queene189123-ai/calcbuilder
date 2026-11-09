@@ -281,67 +281,40 @@ alter table public."suppliers" add constraint "suppliers_id_company_id_key" UNIQ
 alter table public."suppliers" add constraint "suppliers_pkey" PRIMARY KEY (id);
 
 CREATE INDEX companies_created_by_idx ON public.companies USING btree (created_by);
-CREATE UNIQUE INDEX companies_pkey ON public.companies USING btree (id);
 CREATE INDEX company_gmail_connections_connected_by_idx ON public.company_gmail_connections USING btree (connected_by);
-CREATE UNIQUE INDEX company_gmail_connections_pkey ON public.company_gmail_connections USING btree (company_id);
-CREATE UNIQUE INDEX company_members_pkey ON public.company_members USING btree (company_id, user_id);
 CREATE INDEX company_members_user_id_idx ON public.company_members USING btree (user_id);
-CREATE UNIQUE INDEX gmail_monitor_config_pkey ON public.gmail_monitor_config USING btree (id);
-CREATE UNIQUE INDEX gmail_monitor_runs_pkey ON public.gmail_monitor_runs USING btree (company_id);
 CREATE INDEX gmail_monitor_seen_checked_idx ON public.gmail_monitor_seen_messages USING btree (company_id, checked_at DESC);
-CREATE UNIQUE INDEX gmail_monitor_seen_messages_pkey ON public.gmail_monitor_seen_messages USING btree (company_id, gmail_message_id);
 CREATE INDEX gmail_oauth_states_company_id_idx ON public.gmail_oauth_states USING btree (company_id);
-CREATE UNIQUE INDEX gmail_oauth_states_pkey ON public.gmail_oauth_states USING btree (state);
 CREATE INDEX gmail_oauth_states_user_id_idx ON public.gmail_oauth_states USING btree (user_id);
-CREATE UNIQUE INDEX material_folders_company_id_name_key ON public.material_folders USING btree (company_id, name);
 CREATE INDEX material_folders_company_sort_idx ON public.material_folders USING btree (company_id, sort_order, name);
-CREATE UNIQUE INDEX material_folders_pkey ON public.material_folders USING btree (id);
 CREATE INDEX materials_company_idx ON public.materials USING btree (company_id);
 CREATE INDEX materials_created_by_idx ON public.materials USING btree (created_by);
-CREATE UNIQUE INDEX materials_id_company_id_key ON public.materials USING btree (id, company_id);
-CREATE UNIQUE INDEX materials_pkey ON public.materials USING btree (id);
 CREATE INDEX purchase_request_items_company_idx ON public.purchase_request_items USING btree (company_id);
-CREATE UNIQUE INDEX purchase_request_items_id_company_id_key ON public.purchase_request_items USING btree (id, company_id);
 CREATE INDEX purchase_request_items_material_company_idx ON public.purchase_request_items USING btree (material_id, company_id);
-CREATE UNIQUE INDEX purchase_request_items_pkey ON public.purchase_request_items USING btree (id);
 CREATE INDEX purchase_request_items_request_company_idx ON public.purchase_request_items USING btree (request_id, company_id);
-CREATE UNIQUE INDEX purchase_request_suppliers_company_id_request_id_supplier_e_key ON public.purchase_request_suppliers USING btree (company_id, request_id, supplier_email);
-CREATE UNIQUE INDEX purchase_request_suppliers_company_id_subject_token_key ON public.purchase_request_suppliers USING btree (company_id, subject_token);
 CREATE INDEX purchase_request_suppliers_drafted_idx ON public.purchase_request_suppliers USING btree (company_id, request_id, drafted_at DESC);
 CREATE INDEX purchase_request_suppliers_email_idx ON public.purchase_request_suppliers USING btree (company_id, lower(supplier_email));
-CREATE UNIQUE INDEX purchase_request_suppliers_pkey ON public.purchase_request_suppliers USING btree (id);
 CREATE INDEX purchase_request_suppliers_request_id_idx ON public.purchase_request_suppliers USING btree (request_id);
 CREATE INDEX purchase_request_suppliers_request_idx ON public.purchase_request_suppliers USING btree (company_id, request_id);
 CREATE INDEX purchase_request_suppliers_supplier_id_idx ON public.purchase_request_suppliers USING btree (supplier_id);
 CREATE INDEX purchase_requests_company_idx ON public.purchase_requests USING btree (company_id);
 CREATE INDEX purchase_requests_created_by_idx ON public.purchase_requests USING btree (created_by);
-CREATE UNIQUE INDEX purchase_requests_id_company_id_key ON public.purchase_requests USING btree (id, company_id);
-CREATE UNIQUE INDEX purchase_requests_pkey ON public.purchase_requests USING btree (id);
 CREATE INDEX quote_documents_company_idx ON public.quote_documents USING btree (company_id);
-CREATE UNIQUE INDEX quote_documents_id_company_id_key ON public.quote_documents USING btree (id, company_id);
-CREATE UNIQUE INDEX quote_documents_pkey ON public.quote_documents USING btree (id);
 CREATE INDEX quote_documents_request_company_idx ON public.quote_documents USING btree (request_id, company_id);
 CREATE INDEX quote_documents_supplier_company_idx ON public.quote_documents USING btree (supplier_id, company_id);
 CREATE INDEX quote_documents_uploaded_by_idx ON public.quote_documents USING btree (uploaded_by);
 CREATE INDEX quote_items_company_idx ON public.quote_items USING btree (company_id);
-CREATE UNIQUE INDEX quote_items_pkey ON public.quote_items USING btree (id);
 CREATE INDEX quote_items_quote_company_idx ON public.quote_items USING btree (quote_id, company_id);
 CREATE INDEX quote_items_request_item_company_idx ON public.quote_items USING btree (request_item_id, company_id);
-CREATE UNIQUE INDEX supplier_email_messages_company_id_gmail_message_id_key ON public.supplier_email_messages USING btree (company_id, gmail_message_id);
 CREATE INDEX supplier_email_messages_company_received_idx ON public.supplier_email_messages USING btree (company_id, received_at DESC);
-CREATE UNIQUE INDEX supplier_email_messages_pkey ON public.supplier_email_messages USING btree (id);
 CREATE INDEX supplier_email_messages_request_id_idx ON public.supplier_email_messages USING btree (request_id);
 CREATE INDEX supplier_email_messages_supplier_id_fk_idx ON public.supplier_email_messages USING btree (supplier_id);
 CREATE INDEX supplier_email_messages_supplier_idx ON public.supplier_email_messages USING btree (company_id, supplier_id);
 CREATE INDEX supplier_quotes_company_idx ON public.supplier_quotes USING btree (company_id);
 CREATE INDEX supplier_quotes_document_company_idx ON public.supplier_quotes USING btree (document_id, company_id);
-CREATE UNIQUE INDEX supplier_quotes_id_company_id_key ON public.supplier_quotes USING btree (id, company_id);
-CREATE UNIQUE INDEX supplier_quotes_pkey ON public.supplier_quotes USING btree (id);
 CREATE INDEX supplier_quotes_request_company_idx ON public.supplier_quotes USING btree (request_id, company_id);
 CREATE INDEX supplier_quotes_supplier_company_idx ON public.supplier_quotes USING btree (supplier_id, company_id);
 CREATE INDEX suppliers_company_idx ON public.suppliers USING btree (company_id);
-CREATE UNIQUE INDEX suppliers_id_company_id_key ON public.suppliers USING btree (id, company_id);
-CREATE UNIQUE INDEX suppliers_pkey ON public.suppliers USING btree (id);
 
 CREATE OR REPLACE FUNCTION private.add_company_creator_as_owner()
  RETURNS trigger
@@ -476,6 +449,26 @@ AS $function$
      );
 $function$;
 
+CREATE OR REPLACE FUNCTION public.create_company_for_current_user(p_name text)
+ RETURNS SETOF companies
+ LANGUAGE sql
+ SET search_path TO ''
+AS $function$
+  select * from private.create_company_for_current_user(p_name);
+$function$;
+
+CREATE OR REPLACE FUNCTION public.create_manual_quote(p_company_id uuid, p_supplier_name text, p_supplier_email text, p_material text, p_specification text, p_quantity numeric, p_unit text, p_unit_price numeric, p_delivery_cost numeric, p_currency text, p_vat text, p_lead_time_days integer)
+ RETURNS jsonb
+ LANGUAGE sql
+ SET search_path TO ''
+AS $function$
+  select private.create_manual_quote(
+    p_company_id, p_supplier_name, p_supplier_email, p_material,
+    p_specification, p_quantity, p_unit, p_unit_price, p_delivery_cost,
+    p_currency, p_vat, p_lead_time_days
+  );
+$function$;
+
 CREATE TRIGGER add_company_creator_as_owner AFTER INSERT ON companies FOR EACH ROW EXECUTE FUNCTION private.add_company_creator_as_owner();
 
 alter table public."companies" enable row level security;
@@ -496,56 +489,39 @@ alter table public."supplier_email_messages" enable row level security;
 alter table public."supplier_quotes" enable row level security;
 alter table public."suppliers" enable row level security;
 
-create policy "members can read own companies" on public."companies" for SELECT to "authenticated" using (private.is_company_member(id, ( SELECT auth.uid() AS uid)));
-create policy "members can update own companies" on public."companies" for UPDATE to "authenticated" using (private.is_company_member(id, ( SELECT auth.uid() AS uid))) with check (private.is_company_member(id, ( SELECT auth.uid() AS uid)));
-create policy "users can create company" on public."companies" for INSERT to "authenticated" with check ((created_by = ( SELECT auth.uid() AS uid)));
-create policy "deny_client_access_company_gmail_connections" on public."company_gmail_connections" for ALL to "anon", "authenticated" using (false) with check (false);
-create policy "users can read own memberships" on public."company_members" for SELECT to "authenticated" using ((user_id = ( SELECT auth.uid() AS uid)));
-create policy "deny_client_access_gmail_monitor_config" on public."gmail_monitor_config" for ALL to "anon", "authenticated" using (false) with check (false);
-create policy "deny_client_access_gmail_monitor_runs" on public."gmail_monitor_runs" for ALL to "anon", "authenticated" using (false) with check (false);
-create policy "deny_client_access_gmail_monitor_seen_messages" on public."gmail_monitor_seen_messages" for ALL to "anon", "authenticated" using (false) with check (false);
-create policy "deny_client_access_gmail_oauth_states" on public."gmail_oauth_states" for ALL to "anon", "authenticated" using (false) with check (false);
-create policy "members can manage material folders" on public."material_folders" for ALL to "authenticated" using (private.is_company_member(company_id, ( SELECT auth.uid() AS uid))) with check (private.is_company_member(company_id, ( SELECT auth.uid() AS uid)));
-create policy "members can manage materials" on public."materials" for ALL to "authenticated" using (private.is_company_member(company_id, ( SELECT auth.uid() AS uid))) with check (private.is_company_member(company_id, ( SELECT auth.uid() AS uid)));
-create policy "members can manage request items" on public."purchase_request_items" for ALL to "authenticated" using (private.is_company_member(company_id, ( SELECT auth.uid() AS uid))) with check (private.is_company_member(company_id, ( SELECT auth.uid() AS uid)));
-create policy "members can manage request suppliers" on public."purchase_request_suppliers" for ALL to "authenticated" using (private.is_company_member(company_id, ( SELECT auth.uid() AS uid))) with check (private.is_company_member(company_id, ( SELECT auth.uid() AS uid)));
-create policy "members can manage purchase requests" on public."purchase_requests" for ALL to "authenticated" using (private.is_company_member(company_id, ( SELECT auth.uid() AS uid))) with check (private.is_company_member(company_id, ( SELECT auth.uid() AS uid)));
-create policy "members can manage quote documents" on public."quote_documents" for ALL to "authenticated" using (private.is_company_member(company_id, ( SELECT auth.uid() AS uid))) with check (private.is_company_member(company_id, ( SELECT auth.uid() AS uid)));
-create policy "members can manage quote items" on public."quote_items" for ALL to "authenticated" using (private.is_company_member(company_id, ( SELECT auth.uid() AS uid))) with check (private.is_company_member(company_id, ( SELECT auth.uid() AS uid)));
-create policy "deny_client_access_supplier_email_messages" on public."supplier_email_messages" for ALL to "anon", "authenticated" using (false) with check (false);
-create policy "members can manage supplier quotes" on public."supplier_quotes" for ALL to "authenticated" using (private.is_company_member(company_id, ( SELECT auth.uid() AS uid))) with check (private.is_company_member(company_id, ( SELECT auth.uid() AS uid)));
-create policy "members can manage suppliers" on public."suppliers" for ALL to "authenticated" using (private.is_company_member(company_id, ( SELECT auth.uid() AS uid))) with check (private.is_company_member(company_id, ( SELECT auth.uid() AS uid)));
+create policy "members can read own companies" on "public"."companies" for SELECT to "authenticated" using (private.is_company_member(id, ( SELECT auth.uid() AS uid)));
+create policy "members can update own companies" on "public"."companies" for UPDATE to "authenticated" using (private.is_company_member(id, ( SELECT auth.uid() AS uid))) with check (private.is_company_member(id, ( SELECT auth.uid() AS uid)));
+create policy "users can create company" on "public"."companies" for INSERT to "authenticated" with check ((created_by = ( SELECT auth.uid() AS uid)));
+create policy "deny_client_access_company_gmail_connections" on "public"."company_gmail_connections" for ALL to "anon", "authenticated" using (false) with check (false);
+create policy "users can read own memberships" on "public"."company_members" for SELECT to "authenticated" using ((user_id = ( SELECT auth.uid() AS uid)));
+create policy "deny_client_access_gmail_monitor_config" on "public"."gmail_monitor_config" for ALL to "anon", "authenticated" using (false) with check (false);
+create policy "deny_client_access_gmail_monitor_runs" on "public"."gmail_monitor_runs" for ALL to "anon", "authenticated" using (false) with check (false);
+create policy "deny_client_access_gmail_monitor_seen_messages" on "public"."gmail_monitor_seen_messages" for ALL to "anon", "authenticated" using (false) with check (false);
+create policy "deny_client_access_gmail_oauth_states" on "public"."gmail_oauth_states" for ALL to "anon", "authenticated" using (false) with check (false);
+create policy "members can manage material folders" on "public"."material_folders" for ALL to "authenticated" using (private.is_company_member(company_id, ( SELECT auth.uid() AS uid))) with check (private.is_company_member(company_id, ( SELECT auth.uid() AS uid)));
+create policy "members can manage materials" on "public"."materials" for ALL to "authenticated" using (private.is_company_member(company_id, ( SELECT auth.uid() AS uid))) with check (private.is_company_member(company_id, ( SELECT auth.uid() AS uid)));
+create policy "members can manage request items" on "public"."purchase_request_items" for ALL to "authenticated" using (private.is_company_member(company_id, ( SELECT auth.uid() AS uid))) with check (private.is_company_member(company_id, ( SELECT auth.uid() AS uid)));
+create policy "members can manage request suppliers" on "public"."purchase_request_suppliers" for ALL to "authenticated" using (private.is_company_member(company_id, ( SELECT auth.uid() AS uid))) with check (private.is_company_member(company_id, ( SELECT auth.uid() AS uid)));
+create policy "members can manage purchase requests" on "public"."purchase_requests" for ALL to "authenticated" using (private.is_company_member(company_id, ( SELECT auth.uid() AS uid))) with check (private.is_company_member(company_id, ( SELECT auth.uid() AS uid)));
+create policy "members can manage quote documents" on "public"."quote_documents" for ALL to "authenticated" using (private.is_company_member(company_id, ( SELECT auth.uid() AS uid))) with check (private.is_company_member(company_id, ( SELECT auth.uid() AS uid)));
+create policy "members can manage quote items" on "public"."quote_items" for ALL to "authenticated" using (private.is_company_member(company_id, ( SELECT auth.uid() AS uid))) with check (private.is_company_member(company_id, ( SELECT auth.uid() AS uid)));
+create policy "deny_client_access_supplier_email_messages" on "public"."supplier_email_messages" for ALL to "anon", "authenticated" using (false) with check (false);
+create policy "members can manage supplier quotes" on "public"."supplier_quotes" for ALL to "authenticated" using (private.is_company_member(company_id, ( SELECT auth.uid() AS uid))) with check (private.is_company_member(company_id, ( SELECT auth.uid() AS uid)));
+create policy "members can manage suppliers" on "public"."suppliers" for ALL to "authenticated" using (private.is_company_member(company_id, ( SELECT auth.uid() AS uid))) with check (private.is_company_member(company_id, ( SELECT auth.uid() AS uid)));
+create policy "company members can delete quote docs" on "storage"."objects" for DELETE to "authenticated" using (((bucket_id = 'quote-documents'::text) AND private.is_company_member(((storage.foldername(name))[1])::uuid, ( SELECT auth.uid() AS uid))));
+create policy "company members can read quote docs" on "storage"."objects" for SELECT to "authenticated" using (((bucket_id = 'quote-documents'::text) AND private.is_company_member(((storage.foldername(name))[1])::uuid, ( SELECT auth.uid() AS uid))));
+create policy "company members can update quote docs" on "storage"."objects" for UPDATE to "authenticated" using (((bucket_id = 'quote-documents'::text) AND private.is_company_member(((storage.foldername(name))[1])::uuid, ( SELECT auth.uid() AS uid)))) with check (((bucket_id = 'quote-documents'::text) AND private.is_company_member(((storage.foldername(name))[1])::uuid, ( SELECT auth.uid() AS uid))));
+create policy "company members can upload quote docs" on "storage"."objects" for INSERT to "authenticated" with check (((bucket_id = 'quote-documents'::text) AND private.is_company_member(((storage.foldername(name))[1])::uuid, ( SELECT auth.uid() AS uid))));
 
 insert into storage.buckets (id,name,public,file_size_limit,allowed_mime_types) values ("quote-documents","quote-documents",false,20971520,array["application/pdf","application/csv","application/vnd.ms-excel","text/csv","text/plain","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","application/msword","application/vnd.openxmlformats-officedocument.wordprocessingml.document","message/rfc822"]::text[]) on conflict (id) do update set name=excluded.name, public=excluded.public, file_size_limit=excluded.file_size_limit, allowed_mime_types=excluded.allowed_mime_types;
-create policy "company members can delete quote docs" on storage.objects for DELETE to "authenticated" using (((bucket_id = 'quote-documents'::text) AND private.is_company_member(((storage.foldername(name))[1])::uuid, ( SELECT auth.uid() AS uid))));
-create policy "company members can read quote docs" on storage.objects for SELECT to "authenticated" using (((bucket_id = 'quote-documents'::text) AND private.is_company_member(((storage.foldername(name))[1])::uuid, ( SELECT auth.uid() AS uid))));
-create policy "company members can update quote docs" on storage.objects for UPDATE to "authenticated" using (((bucket_id = 'quote-documents'::text) AND private.is_company_member(((storage.foldername(name))[1])::uuid, ( SELECT auth.uid() AS uid)))) with check (((bucket_id = 'quote-documents'::text) AND private.is_company_member(((storage.foldername(name))[1])::uuid, ( SELECT auth.uid() AS uid))));
-create policy "company members can upload quote docs" on storage.objects for INSERT to "authenticated" with check (((bucket_id = 'quote-documents'::text) AND private.is_company_member(((storage.foldername(name))[1])::uuid, ( SELECT auth.uid() AS uid))));
 
--- Authenticated CRUD grants for RLS-protected application tables.
-grant select, insert, update, delete on public."companies" to authenticated;
-grant select, insert, update, delete on public."company_members" to authenticated;
-grant select, insert, update, delete on public."material_folders" to authenticated;
-grant select, insert, update, delete on public."materials" to authenticated;
-grant select, insert, update, delete on public."purchase_request_items" to authenticated;
-grant select, insert, update, delete on public."purchase_request_suppliers" to authenticated;
-grant select, insert, update, delete on public."purchase_requests" to authenticated;
-grant select, insert, update, delete on public."quote_documents" to authenticated;
-grant select, insert, update, delete on public."quote_items" to authenticated;
-grant select, insert, update, delete on public."supplier_quotes" to authenticated;
-grant select, insert, update, delete on public."suppliers" to authenticated;
--- Internal Gmail tables are service-role only.
-revoke all on public."company_gmail_connections" from anon, authenticated;
-grant all on public."company_gmail_connections" to service_role;
-revoke all on public."gmail_oauth_states" from anon, authenticated;
-grant all on public."gmail_oauth_states" to service_role;
-revoke all on public."supplier_email_messages" from anon, authenticated;
-grant all on public."supplier_email_messages" to service_role;
-revoke all on public."gmail_monitor_config" from anon, authenticated;
-grant all on public."gmail_monitor_config" to service_role;
-revoke all on public."gmail_monitor_runs" from anon, authenticated;
-grant all on public."gmail_monitor_runs" to service_role;
-revoke all on public."gmail_monitor_seen_messages" from anon, authenticated;
-grant all on public."gmail_monitor_seen_messages" to service_role;
+-- Runtime grants. Internal Gmail tables remain inaccessible to client roles.
+grant all on all tables in schema public to service_role;
+grant select, insert, update, delete on all tables in schema public to authenticated;
+revoke all on public."company_gmail_connections", public."gmail_oauth_states", public."supplier_email_messages", public."gmail_monitor_config", public."gmail_monitor_runs", public."gmail_monitor_seen_messages" from anon, authenticated;
+grant all on public."company_gmail_connections", public."gmail_oauth_states", public."supplier_email_messages", public."gmail_monitor_config", public."gmail_monitor_runs", public."gmail_monitor_seen_messages" to service_role;
+revoke execute on all functions in schema public from public, anon;
+grant execute on all functions in schema public to authenticated;
 grant execute on all functions in schema private to authenticated;
-revoke all on all functions in schema private from public, anon;
+revoke execute on all functions in schema private from public, anon;
+alter default privileges in schema public revoke all on tables from anon, authenticated;
