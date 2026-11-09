@@ -47,6 +47,11 @@ function parseText(text: string) {
   };
 }
 
+function decodeText(bytes: Uint8Array) {
+  try { return new TextDecoder("utf-8", { fatal: true }).decode(bytes); }
+  catch { return new TextDecoder("windows-1251").decode(bytes); }
+}
+
 async function extractFile(bytes: Uint8Array, filename: string, mime: string) {
   const ext = filename.toLowerCase().split(".").pop() || "";
   if (ext === "xlsx" || ext === "xls") {
@@ -76,7 +81,7 @@ async function extractFile(bytes: Uint8Array, filename: string, mime: string) {
     return lines.join("\n").slice(0, 50000);
   }
   if (["csv", "txt", "eml"].includes(ext)) {
-    return new TextDecoder("utf-8").decode(bytes).replace(/^\uFEFF/, "").slice(0, 50000);
+    return decodeText(bytes).replace(/^\uFEFF/, "").slice(0, 50000);
   }
   throw new Error("Поддерживаются PDF, XLSX, XLS, CSV, TXT и EML.");
 }
