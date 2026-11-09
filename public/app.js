@@ -485,7 +485,7 @@ window.snabproLoadWorkspace=async function(company){
   emailDrafts=(links.data||[]).map(link=>{
    const supplier=(s.data||[]).find(v=>v.id===link.supplier_id),requestItems=itemsByRequest.get(link.request_id)||[];
    const items=requestItems.map(item=>({id:item.id,dbId:item.id,name:item.description,spec:item.specification?.text||'',qty:Number(item.quantity),unit:item.unit}));
-   const fallbackBody='Добрый день!\\n\\nПросим подготовить коммерческое предложение на следующие позиции:\\n\\n'+items.map(item=>'• '+item.name+' — '+item.spec+'; количество: '+item.qty+' '+item.unit).join('\\n')+'\\n\\nПросим указать цену, наличие, срок поставки, стоимость доставки, НДС и условия оплаты.';
+   const fallbackBody='Добрый день!\n\nПросим подготовить коммерческое предложение на следующие позиции:\n\n'+items.map(item=>'• '+item.name+' — '+item.spec+'; количество: '+item.qty+' '+item.unit).join('\\n')+'\\n\\nПросим указать цену, наличие, срок поставки, стоимость доставки, НДС и условия оплаты.';
    return {id:link.subject_token,batchId:link.request_id,requestId:link.request_id,supplierLocalId:supplier?suppliers.find(v=>v.dbId===supplier.id)?.id:null,supplier:supplier?.name||link.supplier_email,to:link.supplier_email,subjectToken:link.subject_token,subject:link.email_subject||('Запрос коммерческого предложения ['+link.subject_token+']'),body:link.email_body||fallbackBody,items,createdAt:link.drafted_at,status:link.status==='sent'?'Отправлено':'Черновик'};
   });
   localStorage.setItem('sp_email_drafts',JSON.stringify(emailDrafts));
