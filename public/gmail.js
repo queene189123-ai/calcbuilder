@@ -222,7 +222,7 @@
         if(rows.some(x=>!Number.isFinite(x.quantity)||x.quantity<=0||!Number.isFinite(x.unitPrice)||x.unitPrice<=0)){showToast?.("Проверьте количество и цену в выбранных строках.");return;}
         importButton.disabled=true;importButton.textContent="Добавляем позиции…";
         try{
-          const result=await call("import_document_lines",{documentId:importButton.dataset.importDocument,lines:rows,currency:card.querySelector("[data-q-currency]")?.value||"RUB",vatLabel:card.querySelector("[data-q-vat]")?.value||"",deliveryCost:card.querySelector("[data-q-delivery]")?.value||0,leadTimeDays:card.querySelector("[data-q-lead]")?.value||null});
+          const result=await call("import_document_lines",{documentId:importButton.dataset.importDocument,messageId:importButton.dataset.importMessage||"",lines:rows,currency:card.querySelector("[data-q-currency]")?.value||"RUB",vatLabel:card.querySelector("[data-q-vat]")?.value||"",deliveryCost:card.querySelector("[data-q-delivery]")?.value||0,leadTimeDays:card.querySelector("[data-q-lead]")?.value||null});
           importButton.textContent=result.alreadyImported?"Уже было добавлено":"Добавлено позиций: "+result.saved;
           importButton.style.background="#18845b";
           await window.snabproRefreshQuotes?.();
