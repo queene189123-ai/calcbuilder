@@ -258,7 +258,7 @@ Deno.serve(async (req) => {
         seenRows=data||[];
       }
       const seenSet=new Set(seenRows.map((x:any)=>x.gmail_message_id));
-      const freshMessages=(messages.messages||[]).slice(0,30).filter((m:any)=>!seenSet.has(String(m.id)));
+      const freshMessages=(messages.messages||[]).slice(0,30).filter((m:any)=>body.force===true||!seenSet.has(String(m.id)));
       const supplierByEmail = new Map((suppliers || []).filter((s: any) => s.email).map((s: any) => [String(s.email).trim().toLowerCase(), s]));
       const items = await Promise.all(freshMessages.map(async (m: {id:string}) => {
         const metaResponse = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/" + m.id + "?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date", { headers: { Authorization: "Bearer " + token } });
