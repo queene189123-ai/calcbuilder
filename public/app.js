@@ -104,13 +104,15 @@ function buildQuoteComparisons(){
  const groups=new Map();
  (quoteOffers||[]).forEach(q=>{
   const currency=['RUB','USD','EUR'].includes(q.currency)?q.currency:'RUB';
-  const qty=Number(q.qty),price=Number(q.unitPrice),delivery=Math.max(0,Number(q.delivery)||0);
-  if(!q.material||!(qty>0)||!(price>0))return;
+  const qty=Number(q.qty),requestedQty=Number(q.requestedQty)||qty,price=Number(q.unitPrice),delivery=Math.max(0,Number(q.delivery)||0);
+  if(!q.material||!(qty>0)||!(price>0)||qty+0.0001<requestedQty)return;
   const vat=String(q.vat||'Не указано');
-   if(!['НДС включён','Без НДС'].includes(vat))return;
-   const key=String(q.material)+'||'+currency+'||'+qty+'||'+String(q.unit||'')+'||'+vat;
+  if(!['НДС включён','Без НДС'].includes(vat))return;
+  const unit=String(q.unit||'').trim().toLowerCase();
+  const identity=q.requestItemId?'request:'+q.requestItemId:'material:'+String(q.material)+'||'+requestedQty+'||'+unit;
+  const key=[identity,currency,unit,vat,requestedQty].join('||');
   if(!groups.has(key))groups.set(key,[]);
-  groups.get(key).push({...q,currency,total:qty*price+delivery});
+  groups.get(key).push({...q,currency,comparisonQty:requestedQty,total:requestedQty*price+delivery});
  });
  return [...groups.values()].filter(a=>a.length>=2).map(a=>{
   a.sort((x,y)=>x.total-y.total);
@@ -327,7 +329,7 @@ async function loadCompanyQuotes(company){
   const supplier=supplierById.get(quote.supplier_id);
   const qty=Number(item.quantity??requestItem?.quantity)||1;
   const deliveryShare=deliveryByItemId.get(item.id)||0;
-  return [{id:item.id,dbQuoteId:quote.id,requestId:quote.request_id,requestItemId:item.request_item_id,material,supplier:supplier?.name||'Поставщик',unitPrice:Number(item.unit_price)||0,qty,delivery:deliveryShare,vat:item.vat_included===true?'НДС включён':item.vat_included===false?(item.specification?.vat_label==='top'?'НДС сверху':'Без НДС'):'Не указано',lead:Number(item.specification?.lead_time_days)||Number(quote.lead_time_days)||0,unit:item.unit||requestItem?.unit||'шт.',spec:spec||'Характеристики не указаны',status:item.source_excerpt==='Ручной ввод'?'Добавлено вручную':'Получено из почты',source:item.source_excerpt||quote.notes||'Письмо поставщика',currency:quote.currency||'RUB',createdAt:item.created_at||quote.created_at||null}];
+  return [{id:item.id,dbQuoteId:quote.id,requestId:quote.request_id,requestItemId:item.request_item_id,requestedQty:Number(requestItem?.quantity)||null,material,supplier:supplier?.name||'Поставщик',unitPrice:Number(item.unit_price)||0,qty,delivery:deliveryShare,vat:item.vat_included===true?'НДС включён':item.vat_included===false?(item.specification?.vat_label==='top'?'НДС сверху':'Без НДС'):'Не указано',lead:Number(item.specification?.lead_time_days)||Number(quote.lead_time_days)||0,unit:item.unit||requestItem?.unit||'шт.',spec:spec||'Характеристики не указаны',status:item.source_excerpt==='Ручной ввод'?'Добавлено вручную':'Получено из почты',source:item.source_excerpt||quote.notes||'Письмо поставщика',currency:quote.currency||'RUB',createdAt:item.created_at||quote.created_at||null}];
  });
  localStorage.setItem('sp_quotes',JSON.stringify(quoteOffers));
  syncQuoteMaterialOptions(true,true);renderQuotes();renderPriceHistory();renderDashboard();
@@ -335,17 +337,17 @@ async function loadCompanyQuotes(company){
 window.snabproRefreshQuotes=async()=>{const company=window.snabproGetCompany?.();if(!company)throw new Error('Предприятие не выбрано');await loadCompanyQuotes(company);return quoteOffers.length};
 function renderQuotes(){
  const arr=quotesForSelected(),body=$('quotesBody');if(!body)return;
- const currencies=[...new Set(arr.map(q=>q.currency||'RUB'))],quantities=[...new Set(arr.map(q=>String(q.qty)+' '+String(q.unit||'')))],vatTypes=[...new Set(arr.map(q=>q.vat||'Не указано'))];
- const vatKnown=vatTypes.length===1&&['НДС включён','Без НДС'].includes(vatTypes[0]);
- const comparable=currencies.length<=1&&quantities.length<=1&&vatKnown;
- const sorted=arr.map(q=>({...q,currency:q.currency||'RUB',total:q.qty*q.unitPrice+q.delivery})).sort((a,b)=>comparable?(a.currency===b.currency?a.total-b.total:a.currency.localeCompare(b.currency)):String(a.supplier).localeCompare(String(b.supplier),'ru'));
+ const currencies=[...new Set(arr.map(q=>q.currency||'RUB'))],quantities=[...new Set(arr.map(q=>String(Number(q.requestedQty)||q.qty)+' '+String(q.unit||'')))],vatTypes=[...new Set(arr.map(q=>q.vat||'Не указано'))];
+ const eligible=arr.filter(q=>Number(q.qty)>0&&Number(q.unitPrice)>0&&(Number(q.qty)+0.0001>=(Number(q.requestedQty)||Number(q.qty))));
+ const comparable=currencies.length<=1&&quantities.length<=1&&vatTypes.length===1&&['НДС включён','Без НДС'].includes(vatTypes[0])&&eligible.length===arr.length&&arr.length>0;
+ const sorted=arr.map(q=>{const comparisonQty=Number(q.requestedQty)||Number(q.qty);return {...q,currency:q.currency||'RUB',comparisonQty,total:comparisonQty*Number(q.unitPrice||0)+Number(q.delivery||0)}}).sort((a,b)=>comparable?a.total-b.total:String(a.supplier).localeCompare(String(b.supplier),'ru'));
  const best=comparable?sorted[0]:null,worst=comparable?sorted[sorted.length-1]:null;
- body.innerHTML=sorted.map((q,i)=>{const isBest=!!best&&i===0;return '<tr class="'+(isBest?'bestrow':'')+'"><td>'+eh(q.supplier)+'</td><td>'+money(q.unitPrice,q.currency)+' / '+eh(q.unit)+'</td><td>'+q.qty+' '+eh(q.unit)+'</td><td>'+money(q.delivery,q.currency)+'</td><td>'+eh(q.vat)+'</td><td>'+q.lead+' дн.</td><td class="strong">'+(vatKnown?money(q.total,q.currency):'Не рассчитано')+'</td><td><span class="pill '+(isBest?'green':'')+'">'+(isBest?'Самая низкая сумма':eh(q.status))+'</span></td></tr>'}).join('')||'<tr><td colspan="8" class="empty">Пока нет предложений для этой позиции. Добавьте КП.</td></tr>';
+ body.innerHTML=sorted.map((q,i)=>{const isBest=!!best&&i===0;return '<tr class="'+(isBest?'bestrow':'')+'"><td>'+eh(q.supplier)+'</td><td>'+money(q.unitPrice,q.currency)+' / '+eh(q.unit)+'</td><td>'+q.qty+' '+eh(q.unit)+'</td><td>'+money(q.delivery,q.currency)+'</td><td>'+eh(q.vat)+'</td><td>'+q.lead+' дн.</td><td class="strong">'+(vatTypes.length===1&&['НДС включён','Без НДС'].includes(vatTypes[0])&&eligible.includes(q)?money(q.total,q.currency):'Не рассчитано')+'</td><td><span class="pill '+(isBest?'green':'')+'">'+(isBest?'Самая низкая сумма':eh(q.status))+'</span></td></tr>'}).join('')||'<tr><td colspan="8" class="empty">Пока нет предложений для этой позиции. Добавьте КП.</td></tr>';
  $('quoteCount').textContent=new Set(quoteOffers.map(q=>q.dbQuoteId||q.id)).size;
- $('quoteQty').textContent=best?best.qty+' '+best.unit:arr.length?'Несопоставимые условия':'—';
+ $('quoteQty').textContent=best?best.comparisonQty+' '+best.unit:arr.length?'Нужна сверка объёма':'—';
  $('quoteBest').textContent=best?money(best.total,best.currency):arr.length?'Нужна сверка условий':'—';
  $('quoteSaving').textContent=best&&worst?money(worst.total-best.total,best.currency):'—';
- $('quoteVerdict').textContent=currencies.length>1?'Предложения указаны в разных валютах. Их нельзя корректно ранжировать без пересчёта в одну валюту.':quantities.length>1?'Различаются количество или единицы измерения. Сначала приведите предложения к одной партии.':vatTypes.length>1?'Различаются условия НДС ('+vatTypes.join(', ')+'). Сначала уточните сопоставимую цену.':arr.length&&!vatKnown?'Условия НДС не подтверждены или указано «НДС сверху» без ставки. Уточните налоговую составляющую у поставщика — до этого рейтинг полной стоимости не рассчитывается.':best?'Лучшее по полной стоимости: '+best.supplier+' — '+money(best.total,best.currency)+'. Срок: '+best.lead+' дн. Спецификация: '+best.spec+'. Перед выбором подтвердите наличие, документы и соответствие характеристик.':'Добавьте предложения, чтобы сравнить итоговую стоимость.';
+ $('quoteVerdict').textContent=currencies.length>1?'Предложения указаны в разных валютах. Их нельзя корректно ранжировать без пересчёта в одну валюту.':quantities.length>1?'Различаются запрошенные объёмы или единицы измерения.':vatTypes.length>1?'Различаются условия НДС ('+vatTypes.join(', ')+'). Сначала уточните сопоставимую цену.':arr.some(q=>Number(q.qty)+0.0001<(Number(q.requestedQty)||Number(q.qty)))?'Некоторые поставщики предлагают меньше запрошенного объёма. Их нельзя ранжировать как полные предложения.':arr.length&&!['НДС включён','Без НДС'].includes(vatTypes[0])?'Условия НДС не подтверждены или указано «НДС сверху» без ставки. Уточните налоговую составляющую у поставщика — до этого рейтинг полной стоимости не рассчитывается.':best?'Сравнение рассчитано на запрошенный объём '+best.comparisonQty+' '+best.unit+'. Лучшее по полной стоимости: '+best.supplier+' — '+money(best.total,best.currency)+'. Перед выбором подтвердите наличие и спецификацию.':'Добавьте предложения, чтобы сравнить итоговую стоимость.';
  buildManagementReport();
 }
 function openQuoteImport(){
