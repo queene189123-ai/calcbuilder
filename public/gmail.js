@@ -188,7 +188,7 @@
           if(!panel){panel=document.createElement("pre");panel.dataset.fileResult="1";panel.style.cssText="white-space:pre-wrap;overflow-wrap:anywhere;max-height:240px;overflow:auto;background:#f5f7fc;padding:10px;border-radius:8px;margin-top:8px;font-size:11px";fileButton.parentElement.appendChild(panel);}
           const prices=result.extracted?.price_candidates||[];
           panel.textContent="Документ сохранён · "+result.extractionStatus+"\\nЦены-кандидаты: "+(prices.map(x=>x.amount+" "+x.currency).join(", ")||"не найдены")+"\\n"+(result.extractedText||result.extractionError||"Текст не извлечён");
-          fileButton.textContent=result.extractionStatus==="review"?"Извлечено · проверить":"Сохранено";
+          fileButton.textContent=result.extractionStatus==="review"?"Извлечено · проверить":result.extractionStatus==="failed"?"Не извлечено · открыть ошибку":"Сохранено";
           if(typeof window.renderUploadedDocuments==="function") await window.renderUploadedDocuments();
         }catch(error){fileButton.disabled=false;fileButton.textContent="Повторить";showToast?.(error.message);}
         return;
