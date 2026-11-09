@@ -1,0 +1,1 @@
+create unique index if not exists supplier_quotes_document_company_uidx on public.supplier_quotes(company_id, document_id) where document_id is not null;
