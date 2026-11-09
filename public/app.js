@@ -482,6 +482,7 @@ async function openDocumentReview(documentId){
   const vatNo=!vatTop&&/без\s*ндс/i.test(ex.vat||textPreview);
   const vatYes=!vatTop&&!vatNo&&/ндс/i.test(ex.vat||'');
   const makeRow=(index,itemId='',priceValue='',parsed=null)=>{
+  const makeRow=(i,itemId='',priceValue='',parsed=null)=>{
    const item=items.find(x=>x.id===itemId);
    const rowItems=items.filter(x=>x.request_id===initialRequest);
    return '<div class="dr-quote-row" data-quote-row style="border:1px solid var(--line,#ddd);border-radius:10px;padding:12px;margin:10px 0">'+
