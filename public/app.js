@@ -429,7 +429,7 @@ async function importQuoteFile(){
  if(!window.snabproWorkspaceReady){toast('Дождитесь загрузки данных предприятия');return;}
  if(file.size<=0||file.size>15*1024*1024){toast('Размер файла должен быть до 15 МБ');return;}
  const ext=file.name.toLowerCase().split('.').pop();
- if(!['pdf','xlsx','xls','csv','txt','eml'].includes(ext)){toast('Поддерживаются PDF, XLSX, XLS, CSV, TXT и EML');return;}
+ if(!['pdf','xlsx','xls','docx','csv','txt','eml'].includes(ext)){toast('Поддерживаются PDF, XLSX, XLS, DOCX, CSV, TXT и EML');return;}
  const btn=document.querySelector('button[onclick="importQuoteFile()"]');
  if(btn){btn.disabled=true;btn.textContent='Загружаем и извлекаем…';}
  try{
