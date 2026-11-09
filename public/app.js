@@ -476,8 +476,9 @@ async function openDocumentReview(documentId){
  const detectedRows=Math.max(parsedLineItems.length,(textPreview.match(/\b\d+\s*(?:лист(?:ов|а)?|шт\.?|м)\b/gi)||[]).length);
  const deliveryMatch=textPreview.match(/Доставка[^0-9]{0,80}([\d\s]+(?:[,.][0-9]{2})?)\s*₽/i);
  const detectedDelivery=deliveryMatch?Number(deliveryMatch[1].replace(/\s/g,'').replace(',','.')):0;
- const vatNo=/без\s*ндс/i.test(ex.vat||textPreview);
- const vatYes=!vatNo&&/ндс/i.test(ex.vat||'');
+  const vatTop=/ндс\s+сверху|плюс\s+ндс|\+\s*ндс/i.test(ex.vat||textPreview);
+  const vatNo=!vatTop&&/без\s*ндс/i.test(ex.vat||textPreview);
+  const vatYes=!vatTop&&!vatNo&&/ндс/i.test(ex.vat||'');
  const makeRow=(index,itemId='',priceValue='',parsed=null)=>{
   const item=items.find(x=>x.id===itemId);
   const rowItems=items.filter(x=>x.request_id===initialRequest);
