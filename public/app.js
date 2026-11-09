@@ -100,10 +100,47 @@ function selectAll(){materials.forEach(m=>m.selected=true);save();renderMaterial
 function clearSelection(){materials.forEach(m=>m.selected=false);save();renderMaterials()}
 function renderSuppliers(){let q=($('supSearch')?.value||'').toLowerCase(),a=suppliers.filter(s=>(s.name+' '+s.cats.join(' ')).toLowerCase().includes(q));$('supplierGrid').innerHTML=a.map(s=>'<div class="suppliercard"><div style="display:flex;justify-content:space-between"><h4>'+eh(s.name)+'</h4><span class="pill">'+eh(s.rating)+'</span></div><div class="suppliermeta">'+eh(s.region)+'<br>'+eh(s.contact)+'<br>'+eh(s.email)+'<br>Обычный срок: '+eh(s.lead)+'</div>'+s.cats.map(c=>'<span class="tag">'+eh(c)+'</span>').join('')+'</div>').join('')||'<div class="empty">Поставщики не найдены</div>'}
 function renderPurchases(){let f=$('purchaseFilter')?.value||'',a=purchases.filter(p=>!f||p.status===f);$('purchasesBody').innerHTML=a.map(p=>'<tr><td class="strong">'+eh(p.name)+'</td><td>'+eh(p.items)+'</td><td>'+eh(p.date)+'</td><td>'+p.replies+' / '+p.vendors+'</td><td><span class="pill '+(p.status==='Завершена'?'green':p.status==='Ожидаем ответы'?'orange':'')+'">'+eh(p.status)+'</span></td><td><button class="btn small" onclick="showPurchase('+p.id+')">Открыть</button></td></tr>').join('')||'<tr><td colspan="6" class="empty">Закупок пока нет</td></tr>'}
-const recs=[['Проверить альтернативного поставщика нержавейки','В демо есть вариант на 600 ₽ за лист дешевле, но доставка дольше на 5 дней.','до 60 000 ₽'],['Объединить закупку труб 25 и 50 мм','Один поставщик может привезти обе позиции одним рейсом.','до 12 000 ₽'],['Запросить обновлённую цену на АБС-листы','Последнее предложение старше месяца — нужно подтвердить цену.','до 5 000 ₽'],['Проверить условия по утеплителю','Сопоставить плотность, толщину и стоимость упаковки.','до 10 000 ₽']];
-function recHtml(a){return a.map(r=>'<div class="recommend"><div><h4>'+r[0]+'</h4><p>'+r[1]+'</p></div><div class="saving">'+r[2]+'</div></div>').join('')}
-function renderDashboard(){$('statPurchases').textContent=purchases.filter(p=>p.status!=='Завершена').length;$('statSuppliers').textContent=suppliers.length;$('dashPurchases').innerHTML=purchases.slice(0,4).map(p=>'<tr><td class="strong">'+eh(p.name)+'</td><td>'+p.vendors+'</td><td><span class="pill">'+eh(p.status)+'</span></td><td>'+eh(p.date)+'</td></tr>').join('')||'<tr><td colspan="4" class="empty">Создайте первую закупку</td></tr>';$('dashRecs').innerHTML=recHtml(recs.slice(0,2))}
-function renderAll(){renderMaterials();renderSuppliers();renderPurchases();renderDashboard();$('recommendations').innerHTML=recHtml(recs);renderQuotes()}
+function buildQuoteComparisons(){
+ const groups=new Map();
+ (quoteOffers||[]).forEach(q=>{
+  const currency=['RUB','USD','EUR'].includes(q.currency)?q.currency:'RUB';
+  const qty=Number(q.qty),price=Number(q.unitPrice),delivery=Math.max(0,Number(q.delivery)||0);
+  if(!q.material||!(qty>0)||!(price>0))return;
+  const key=String(q.material)+'||'+currency;
+  if(!groups.has(key))groups.set(key,[]);
+  groups.get(key).push({...q,currency,total:qty*price+delivery});
+ });
+ return [...groups.values()].filter(a=>a.length>=2).map(a=>{
+  a.sort((x,y)=>x.total-y.total);
+  return {material:a[0].material,currency:a[0].currency,best:a[0],worst:a[a.length-1],saving:Math.max(0,a[a.length-1].total-a[0].total),count:a.length};
+ });
+}
+function buildQuoteRecommendations(){
+ return buildQuoteComparisons().filter(x=>x.saving>0).map(x=>[
+  'Сравнить предложения: '+x.material,
+  'Самая низкая полная стоимость — '+x.best.supplier+'. Разница с самым дорогим вариантом: '+money(x.saving,x.currency)+'. Перед выбором проверьте сроки, наличие и спецификацию.',
+  money(x.saving,x.currency)
+ ]);
+}
+function recHtml(a){return a.map(r=>'<div class="recommend"><div><h4>'+eh(r[0])+'</h4><p>'+eh(r[1])+'</p></div><div class="saving">'+eh(r[2])+'</div></div>').join('')}
+function renderDashboard(){
+ $('statPurchases').textContent=purchases.filter(p=>p.status!=='Завершена').length;
+ $('statSuppliers').textContent=suppliers.length;
+ const offerCount=new Set((quoteOffers||[]).map(q=>q.dbQuoteId||q.id)).size;
+ const comparisons=buildQuoteComparisons(),currencies=[...new Set((quoteOffers||[]).map(q=>q.currency||'RUB'))];
+ const total=currencies.length<=1?comparisons.reduce((sum,x)=>sum+x.saving,0):null;
+ if($('statOffers'))$('statOffers').textContent=offerCount;
+ if($('statSaving'))$('statSaving').textContent=total===null?(comparisons.length?'Разные валюты':'—'):money(total,currencies[0]||'RUB');
+ $('dashPurchases').innerHTML=purchases.slice(0,4).map(p=>'<tr><td class="strong">'+eh(p.name)+'</td><td>'+p.vendors+'</td><td><span class="pill">'+eh(p.status)+'</span></td><td>'+eh(p.date)+'</td></tr>').join('')||'<tr><td colspan="4" class="empty">Создайте первую закупку</td></tr>';
+ const recommendations=buildQuoteRecommendations();
+ $('dashRecs').innerHTML=recommendations.length?recHtml(recommendations.slice(0,3)):'<div class="empty">Для расчёта экономии добавьте минимум два предложения по одной позиции.</div>';
+ if($('recommendations'))$('recommendations').innerHTML=recommendations.length?recHtml(recommendations):'<div class="empty">Пока нет сопоставимых предложений. Экономия появится после получения двух и более КП на одну позицию.</div>';
+ if($('attentionList'))$('attentionList').innerHTML=offerCount
+  ?'<div class="activity"><i class="dot"></i><div><b>Получено коммерческих предложений: '+offerCount+'</b><small>Сопоставимых позиций для сравнения: '+comparisons.length+'</small></div></div>'+
+   (comparisons.length?'<div class="activity"><i class="dot"></i><div><b>Есть варианты для экономии</b><small>Потенциальная разница по сопоставимым предложениям: '+(total===null?'разные валюты':money(total,currencies[0]||'RUB'))+'</small></div></div>':'<div class="activity"><i class="dot" style="background:#e5a13a"></i><div><b>Пока недостаточно КП для сравнения</b><small>Добавьте ещё одно предложение на ту же позицию.</small></div></div>')
+  :'<div class="empty">Новых событий пока нет. Создайте закупку и соберите первые предложения поставщиков.</div>';
+}
+function renderAll(){renderMaterials();renderSuppliers();renderPurchases();renderDashboard();renderQuotes()}
 function openPurchase(){
  const items=materials;
  const groups=[...new Set([...materialFolders,...items.map(m=>m.folder||'Без папки')])].map(name=>({name,items:items.filter(m=>(m.folder||'Без папки')===name)})).filter(g=>g.items.length);
@@ -150,7 +187,7 @@ function showPurchase(id){
  modal(p.name,body,()=>{p.status='Завершена';save();renderAll();toast('Закупка завершена');return true});
 }
 function marketSearch(){let m=$('marketMaterial').value,r=$('marketRegion').value,q=$('marketQty').value,p=$('marketPriority').value;$('marketResults').innerHTML='<div class="panel"><div class="panelhead"><h3>Результаты демонстрационного поиска</h3><span class="pill orange">Примеры · не проверены</span></div><div class="panelbody"><p class="muted" style="font-size:10px">Запрос: '+eh(m)+' · '+eh(r)+' · '+eh(q)+' · '+eh(p)+'</p><div class="suppliergrid"><div class="suppliercard"><h4>СеверМет Ресурс</h4><div class="suppliermeta">Пример цены: 7 900 ₽/лист<br>Срок: 7–10 дней<br>Требуется проверка</div><span class="pill orange">Не подтверждено</span></div><div class="suppliercard"><h4>БалтикПром Снаб</h4><div class="suppliermeta">Пример цены: 8 150 ₽/лист<br>Срок: 3–5 дней<br>Требуется проверка</div><span class="pill orange">Не подтверждено</span></div><div class="suppliercard"><h4>РегионКомплект</h4><div class="suppliermeta">Цена по запросу<br>Срок уточняется<br>Требуется проверка</div><span class="pill orange">Не подтверждено</span></div></div><div class="notice" style="margin-top:12px">В реальной версии следующий шаг — проверить компанию, запросить КП и сопоставить марку, размеры, НДС, доставку и сроки.</div></div></div>'}
-function runAnalysis(){toast('Демо-анализ: 4 рекомендации, потенциальная экономия 87 000 ₽.');$('recommendations').innerHTML=recHtml(recs)}
+function runAnalysis(){const recommendations=buildQuoteRecommendations();$('recommendations').innerHTML=recommendations.length?recHtml(recommendations):'<div class="empty">Недостаточно сопоставимых КП для анализа.</div>';toast(recommendations.length?'Анализ завершён по реальным предложениям поставщиков.':'Добавьте ещё КП по тем же позициям для расчёта экономии.')}
 function openPlans(){const chosen=localStorage.getItem('sp_plan')||'';modal('Тарифы СнабПро','<div class="notice">Сейчас это демонстрация интерфейса. Оплата банковской картой будет подключена после выбора хостинга и запуска коммерческой версии. Никакие данные карты здесь не запрашиваются.</div><div class="suppliergrid" style="grid-template-columns:repeat(2,minmax(0,1fr))"><div class="suppliercard"><span class="pill">СТАРТ</span><h4 style="font-size:19px;margin-top:12px">4 900 ₽ <small class="muted">/ месяц</small></h4><div class="suppliermeta">До 3 пользователей<br>База поставщиков<br>Создание закупок<br>Сравнение предложений</div><button class="btn '+(chosen==='Старт'?'primary':'')+'" style="margin-top:14px;width:100%" onclick="choosePlan(\'Старт\')">'+(chosen==='Старт'?'Выбран':'Выбрать тариф')+'</button></div><div class="suppliercard" style="border-color:#4268e8"><span class="pill green">БИЗНЕС</span><h4 style="font-size:19px;margin-top:12px">9 900 ₽ <small class="muted">/ месяц</small></h4><div class="suppliermeta">До 10 пользователей<br>Все функции тарифа Старт<br>Аналитика экономии<br>История цен и поставщиков<br>Приоритетная поддержка</div><button class="btn primary" style="margin-top:14px;width:100%" onclick="choosePlan(\'Бизнес\')">'+(chosen==='Бизнес'?'Выбран':'Выбрать тариф')+'</button></div></div><div class="notice warn" style="margin-top:12px">Статус оплаты: отключена в демоверсии. После подключения эквайринга здесь появится защищённая оплата картой и управление подпиской.</div><div class="modalfoot"><button class="btn" onclick="closeModal()">Закрыть</button></div>',()=>true)}
 function choosePlan(name){localStorage.setItem('sp_plan',name);closeModal();toast('Выбран тариф «'+name+'». Оплата будет подключена после запуска коммерческой версии.');}
 function init(){renderAll()}
