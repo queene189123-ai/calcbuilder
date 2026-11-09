@@ -129,7 +129,7 @@ function renderDashboard(){
  $('statPurchases').textContent=purchases.filter(p=>p.status!=='Завершена').length;
  $('statSuppliers').textContent=suppliers.length;
  const offerCount=new Set((quoteOffers||[]).map(q=>q.dbQuoteId||q.id)).size;
- const comparisons=buildQuoteComparisons(),currencies=[...new Set((quoteOffers||[]).map(q=>q.currency||'RUB'))];
+ const comparisons=buildQuoteComparisons(),currencies=[...new Set(comparisons.map(q=>q.currency))];
  const total=currencies.length<=1&&comparisons.length?comparisons.reduce((sum,x)=>sum+x.saving,0):null;
  if($('statOffers'))$('statOffers').textContent=offerCount;
  if($('statSaving'))$('statSaving').textContent=total===null?(comparisons.length?'Разные валюты':'—'):money(total,currencies[0]||'RUB');
