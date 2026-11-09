@@ -115,17 +115,17 @@ async function syncCompany(connection: any) {
     .map((s: any) => [String(s.email).trim().toLowerCase(), s]));
   let saved = 0;
   for (const messageId of freshIds) {
-    const response = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/" + encodeURIComponent(messageId) + "?format=full", {
+    const metadataResponse = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/" + encodeURIComponent(messageId) + "?format=metadata&metadataHeaders=From&metadataHeaders=Subject", {
       headers: { Authorization: "Bearer " + token }
     });
-    const message = await response.json();
-    if (!response.ok) continue;
-    const headers = message.payload?.headers || [];
+    const metadata = await metadataResponse.json();
+    if (!metadataResponse.ok) continue;
+    const headers = metadata.payload?.headers || [];
     const from = header(headers, "From");
     const fromEmail = (from.match(/<([^>]+)>/)?.[1] || from).trim().toLowerCase();
     if (!fromEmail || fromEmail === String(connection.gmail_address || "").toLowerCase()) continue;
     const subject = header(headers, "Subject");
-    const tokenMatch = subject.match(/\[(SP-[A-Z0-9-]+)\]/i);
+    const tokenMatch = subject.match(/\\[(SP-[A-Z0-9-]+)\\]/i);
     const subjectToken = tokenMatch?.[1] || null;
     const requestLink = subjectToken ? (links || []).find((x: any) =>
       String(x.subject_token).toLowerCase() === subjectToken.toLowerCase() &&
@@ -133,9 +133,16 @@ async function syncCompany(connection: any) {
     const supplier = requestLink?.supplier_id
       ? (suppliers || []).find((s: any) => s.id === requestLink.supplier_id)
       : supplierByEmail.get(fromEmail);
+    if (!requestLink && !supplier) continue;
+
+    const response = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/" + encodeURIComponent(messageId) + "?format=full", {
+      headers: { Authorization: "Bearer " + token }
+    });
+    const message = await response.json();
+    if (!response.ok) continue;
     const texts: string[] = [], attachments: any[] = [];
     collectParts(message.payload, texts, attachments);
-    const bodyText = (texts.join("\n\n").slice(0, 30000) || message.snippet || "");
+    const bodyText = (texts.join("\\n\\n").slice(0, 30000) || message.snippet || "");
     const extracted = parseSupplierReply(bodyText);
     const receivedAt = message.internalDate ? new Date(Number(message.internalDate)).toISOString() : null;
     const row = {
@@ -144,7 +151,7 @@ async function syncCompany(connection: any) {
       request_id: requestLink?.request_id || null,
       from_email: fromEmail, subject, body_text: bodyText,
       attachments, extracted_data: extracted,
-      processing_status: requestLink || supplier ? "needs_review" : "received",
+      processing_status: "needs_review",
       received_at: receivedAt
     };
     const { error: insertError } = await db.from("supplier_email_messages").upsert(row, {
