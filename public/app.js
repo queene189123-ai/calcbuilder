@@ -592,7 +592,7 @@ async function openDocumentReview(documentId){
    purchases.unshift({id:localId,dbId:requestId,name:createdRequestTitle,items:rows.map(row=>row.description+' · '+row.quantity+' '+row.unit).join('; '),vendors:1,replies:1,status:'Сравнение предложений',date:new Date().toLocaleDateString('ru-RU'),requestItems:localItems});
    save();renderPurchases();renderDashboard();
   }
-  closeModal();await window.snabproRefreshQuotes?.();await renderUploadedDocuments();
+  closeModal();await window.snabproLoadWorkspace?.(company);await renderUploadedDocuments();
   toast(docError?'КП добавлено в сравнение. Статус документа не обновился.':'КП подтверждено: добавлено позиций — '+quoteItems.length+'.');
  }); 
 }
