@@ -191,12 +191,14 @@ Deno.serve(async (req) => {
         const {data:item,error:itemError}=await admin.from("purchase_request_items").select("id,description,specification,quantity,unit").eq("company_id",companyId).eq("request_id",doc.request_id).eq("id",requestItemId).maybeSingle();
         if(itemError)throw itemError;
         if(!item)return json({error:"Одна из выбранных позиций не относится к закупке этого КП."},400);
-        valid.push({item,quantity,unitPrice});
+        const lineIndex=Number(line.lineIndex);
+        if(!Number.isInteger(lineIndex)||lineIndex<0||lineIndex>=sourceLines.length)return json({error:"Не удалось определить исходную строку КП."},400);
+        valid.push({item,quantity,unitPrice,sourceLine:sourceLines[lineIndex]||{}});
       }
       const lead=body.leadTimeDays===""||body.leadTimeDays==null?null:Math.max(0,Math.round(Number(body.leadTimeDays)));
       const {data:quote,error:quoteError}=await admin.from("supplier_quotes").insert({company_id:companyId,request_id:doc.request_id,supplier_id:doc.supplier_id,document_id:documentId,currency,delivery_cost:deliveryCost,lead_time_days:lead,notes:"Импортировано из документа: "+String(doc.original_filename||"КП").slice(0,180)}).select("id").single();
       if(quoteError)throw quoteError;
-      const quoteItems=valid.map(({item,quantity,unitPrice},index)=>({company_id:companyId,quote_id:quote.id,request_item_id:item.id,description:item.description,specification:{...(item.specification||{}),supplier_description:String(sourceLines[index]?.description||"").slice(0,500),supplier_specification:sourceLines[index]?.specification||{} ,vat_label:vatLabel},quantity,unit:item.unit,unit_price:unitPrice,vat_included:vatLabel==="yes"?true:vatLabel==="no"||vatLabel==="top"?false:null,confidence:0.75,source_excerpt:String(sourceLines[index]?.source_excerpt||"").slice(0,1000)||null}));
+      const quoteItems=valid.map(({item,quantity,unitPrice,sourceLine})=>({company_id:companyId,quote_id:quote.id,request_item_id:item.id,description:item.description,specification:{...(item.specification||{}),supplier_description:String(sourceLine.description||"").slice(0,500),supplier_specification:sourceLine.specification||{},vat_label:vatLabel},quantity,unit:item.unit,unit_price:unitPrice,vat_included:vatLabel==="yes"?true:vatLabel==="no"||vatLabel==="top"?false:null,confidence:0.75,source_excerpt:String(sourceLine.source_excerpt||"").slice(0,1000)||null}));
       const {error:itemsError}=await admin.from("quote_items").insert(quoteItems);
       if(itemsError){await admin.from("supplier_quotes").delete().eq("company_id",companyId).eq("id",quote.id);throw itemsError;}
       return json({ok:true,quoteId:quote.id,saved:quoteItems.length});
@@ -229,7 +231,7 @@ Deno.serve(async (req) => {
       const supplierId=String(body.supplierId||"")||null;
       const requestId=String(body.requestId||"")||null;
       if(!(await canManagePurchasing(companyId,user.id)))return json({error:"Для сопоставления нужны права владельца, администратора или закупщика."},403);
-      const {data:message,error:messageError}=await admin.from("supplier_email_messages").select("id,from_email").eq("company_id",companyId).eq("gmail_message_id",messageId).maybeSingle();
+      const {data:message,error:messageError}=await admin.from("supplier_email_messages").select("id,gmail_message_id,from_email").eq("company_id",companyId).eq("gmail_message_id",messageId).maybeSingle();
       if(messageError)throw messageError;
       if(!message)return json({error:"Письмо не найдено."},404);
       if(supplierId){
@@ -244,6 +246,8 @@ Deno.serve(async (req) => {
       }
       const {error:updateError}=await admin.from("supplier_email_messages").update({supplier_id:supplierId,request_id:requestId,processing_status:"needs_review"}).eq("company_id",companyId).eq("id",message.id);
       if(updateError)throw updateError;
+      const {error:documentLinkError}=await admin.from("quote_documents").update({supplier_id:supplierId,request_id:requestId}).eq("company_id",companyId).contains("extracted_data",{gmail_message_id:message.gmail_message_id});
+      if(documentLinkError)throw documentLinkError;
       return json({ok:true});
     }
     if (body.action === "saved_inbox") {
