@@ -170,16 +170,17 @@ Deno.serve(async (req) => {
       const unitPrice=Number(body.unitPrice);
       const deliveryCost=Math.max(0,Number(body.deliveryCost)||0);
       const currency=String(body.currency||"RUB").toUpperCase();
+      const vatLabel=String(body.vatLabel||"").toLowerCase();
       if(!(await canManagePurchasing(companyId,user.id)))return json({error:"Для добавления КП нужны права владельца, администратора или закупщика."},403);
       const c=await getConnection(companyId,user.id);
-      if(!messageId||!requestItemId||!Number.isFinite(unitPrice)||unitPrice<=0||!["RUB","USD","EUR"].includes(currency)) return json({error:"Укажите позицию закупки и корректную цену."},400);
+      if(!messageId||!requestItemId||!Number.isFinite(unitPrice)||unitPrice<=0||!["RUB","USD","EUR"].includes(currency)||!["","yes","no","top"].includes(vatLabel)) return json({error:"Укажите позицию закупки и корректную цену."},400);
       const {data:message,error:messageError}=await admin.from("supplier_email_messages").select("id,request_id,supplier_id,from_email,subject,body_text").eq("company_id",companyId).eq("gmail_message_id",messageId).maybeSingle();
       if(messageError||!message||!message.request_id||!message.supplier_id) return json({error:"Письмо не привязано к закупке и поставщику. Сначала проверьте сопоставление."},400);
       const {data:item,error:itemError}=await admin.from("purchase_request_items").select("id,request_id,description,specification,quantity,unit").eq("company_id",companyId).eq("request_id",message.request_id).eq("id",requestItemId).maybeSingle();
       if(itemError||!item) return json({error:"Выбранная позиция не относится к этой закупке."},400);
       const {data:quote,error:quoteError}=await admin.from("supplier_quotes").insert({company_id:companyId,request_id:message.request_id,supplier_id:message.supplier_id,currency,delivery_cost:deliveryCost,lead_time_days:body.leadTimeDays===""||body.leadTimeDays==null?null:Math.max(0,Math.round(Number(body.leadTimeDays))),payment_terms:String(body.paymentTerms||"").slice(0,500)||null,notes:"Сохранено из письма: "+String(message.subject||"").slice(0,180)}).select("id").single();
       if(quoteError) throw quoteError;
-      const {error:quoteItemError}=await admin.from("quote_items").insert({company_id:companyId,quote_id:quote.id,request_item_id:item.id,description:item.description,specification:item.specification,quantity:item.quantity,unit:item.unit,unit_price:unitPrice,vat_included:body.vatIncluded==="true"?true:body.vatIncluded==="false"?false:null,availability:String(body.availability||"").slice(0,80)||null,confidence:0.7,source_excerpt:String(body.sourceExcerpt||"").slice(0,500)||null});
+      const {error:quoteItemError}=await admin.from("quote_items").insert({company_id:companyId,quote_id:quote.id,request_item_id:item.id,description:item.description,specification:{...(item.specification||{}),vat_label:vatLabel},quantity:item.quantity,unit:item.unit,unit_price:unitPrice,vat_included:vatLabel==="yes"?true:vatLabel==="no"||vatLabel==="top"?false:body.vatIncluded==="true"?true:body.vatIncluded==="false"?false:null,availability:String(body.availability||"").slice(0,80)||null,confidence:0.7,source_excerpt:String(body.sourceExcerpt||"").slice(0,500)||null});
       if(quoteItemError){await admin.from("supplier_quotes").delete().eq("company_id",companyId).eq("id",quote.id);throw quoteItemError;}
       await admin.from("supplier_email_messages").update({processing_status:"parsed"}).eq("company_id",companyId).eq("gmail_message_id",messageId);
       return json({ok:true,quoteId:quote.id});
