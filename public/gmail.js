@@ -35,7 +35,13 @@
     try {
       const d=await call("status");
       if(statusEl()) statusEl().textContent=d.connected ? "Подключён: "+d.connection.gmail_address+" · автообновление каждые 10 минут" : "Gmail не подключён. Подключите рабочий ящик предприятия.";
-      if(d.connected) await inbox();
+      if(d.connected){
+        const inboxData=await inbox(),monitor=inboxData?.monitor;
+        if(statusEl()&&monitor?.last_checked_at){
+          const checked=new Date(monitor.last_checked_at).toLocaleString("ru-RU",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"});
+          statusEl().textContent="Подключён: "+d.connection.gmail_address+" · проверено "+checked+(monitor.status==="error"?" · ошибка: "+(monitor.last_error||"см. журнал"):"");
+        }else if(statusEl())statusEl().textContent="Подключён: "+d.connection.gmail_address+" · ожидаем первую автопроверку";
+      }
     } catch(e) { if(statusEl()) {statusEl().textContent=e.message;statusEl().classList.add("error");} }
   }
   async function connect() {
@@ -84,7 +90,8 @@
       const matched=items.filter(m=>m.supplierName).length, linked=items.filter(m=>m.requestId).length;
       out.innerHTML='<div style="font-size:11px;color:#78849a;margin:8px 0">Синхронизировано писем: '+items.length+' · распознано поставщиков: '+matched+' · привязано к заявкам: '+linked+'</div>'+
         (items.map(renderInboxMessage).join("")||"Новых входящих писем за последние 30 дней не найдено.");
-    } catch(e) { if(out)out.textContent=e.message; }
+      return d;
+    } catch(e) { if(out)out.textContent=e.message; return null; }
     finally {if(b){b.disabled=false;b.textContent="Показать входящие";}}
   }
 
