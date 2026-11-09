@@ -81,9 +81,17 @@ begin
   if v_rls_tables <> 17 then raise exception 'Expected RLS on all 17 public tables, found %', v_rls_tables; end if;
 
   if not exists (select 1 from pg_policies where schemaname='public' and tablename='supplier_quotes' and policyname='buyers can insert supplier quotes' and cmd='INSERT')
+     or not exists (select 1 from pg_policies where schemaname='public' and tablename='supplier_quotes' and policyname='buyers can update supplier quotes' and cmd='UPDATE')
+     or not exists (select 1 from pg_policies where schemaname='public' and tablename='supplier_quotes' and policyname='buyers can delete supplier quotes' and cmd='DELETE')
      or not exists (select 1 from pg_policies where schemaname='public' and tablename='quote_items' and policyname='buyers can insert quote items' and cmd='INSERT')
+     or not exists (select 1 from pg_policies where schemaname='public' and tablename='quote_items' and policyname='buyers can update quote items' and cmd='UPDATE')
+     or not exists (select 1 from pg_policies where schemaname='public' and tablename='quote_items' and policyname='buyers can delete quote items' and cmd='DELETE')
      or not exists (select 1 from pg_policies where schemaname='public' and tablename='quote_documents' and policyname='buyers can insert quote documents' and cmd='INSERT')
+     or not exists (select 1 from pg_policies where schemaname='public' and tablename='quote_documents' and policyname='buyers can update quote documents' and cmd='UPDATE')
+     or not exists (select 1 from pg_policies where schemaname='public' and tablename='quote_documents' and policyname='buyers can delete quote documents' and cmd='DELETE')
      or not exists (select 1 from pg_policies where schemaname='storage' and tablename='objects' and policyname='buyers can upload quote docs' and cmd='INSERT')
+     or not exists (select 1 from pg_policies where schemaname='storage' and tablename='objects' and policyname='buyers can update quote docs' and cmd='UPDATE')
+     or not exists (select 1 from pg_policies where schemaname='storage' and tablename='objects' and policyname='buyers can delete quote docs' and cmd='DELETE')
      or exists (select 1 from pg_policies where schemaname='public' and tablename in ('supplier_quotes','quote_items','quote_documents') and policyname like 'members can manage%')
   then raise exception 'Buyer-role write policies are missing or legacy broad policies remain'; end if;
 
