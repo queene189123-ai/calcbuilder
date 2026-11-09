@@ -265,19 +265,20 @@ Deno.serve(async (req) => {
         const metaResponse = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/" + m.id + "?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date", { headers: { Authorization: "Bearer " + token } });
         const meta = await metaResponse.json();
         if (!metaResponse.ok) return null;
-        const {error:seenInsertError}=await admin.from("gmail_monitor_seen_messages").upsert({company_id:companyId,gmail_message_id:m.id,checked_at:new Date().toISOString()},{onConflict:"company_id,gmail_message_id",ignoreDuplicates:true});
-        if(seenInsertError)throw seenInsertError;
         const metaHeaders = meta.payload?.headers || [];
         const metaHeader = (name: string) => metaHeaders.find((x:any)=>String(x.name).toLowerCase()===name.toLowerCase())?.value || "";
         const from = metaHeader("From");
         const fromEmail = (from.match(/<([^>]+)>/)?.[1] || from).trim().toLowerCase();
-        if (!fromEmail || fromEmail === String(c.gmail_address || "").trim().toLowerCase()) return null;
+        if (!fromEmail || fromEmail === String(c.gmail_address || "").trim().toLowerCase()) {
+          const {error:seenInsertError}=await admin.from("gmail_monitor_seen_messages").upsert({company_id:companyId,gmail_message_id:m.id,checked_at:new Date().toISOString()},{onConflict:"company_id,gmail_message_id",ignoreDuplicates:true});
+          if(seenInsertError)throw seenInsertError;
+          return null;
+        }
         const subject = metaHeader("Subject");
         const subjectToken = subject.match(/\[(SP-[A-Z0-9-]+)\]/i)?.[1] || null;
         const requestLink = subjectToken ? (links || []).find((x:any)=>String(x.subject_token).toLowerCase()===subjectToken.toLowerCase()&&String(x.supplier_email).toLowerCase()===fromEmail) : null;
         const supplier = supplierByEmail.get(fromEmail) || null;
-        if (!requestLink && !supplier) return null;
-
+        // Save unknown external senders with null supplier/request links for manual review.
         const r = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/" + m.id + "?format=full", { headers: { Authorization: "Bearer " + token } });
         const d = await r.json();
         if (!r.ok) return null;
@@ -295,6 +296,8 @@ Deno.serve(async (req) => {
           ? await admin.from("supplier_email_messages").update(row).eq("id",existingMessage.id)
           : await admin.from("supplier_email_messages").insert(row);
         if(saveResult.error) throw saveResult.error;
+        const {error:seenInsertError}=await admin.from("gmail_monitor_seen_messages").upsert({company_id:companyId,gmail_message_id:m.id,checked_at:new Date().toISOString()},{onConflict:"company_id,gmail_message_id",ignoreDuplicates:true});
+        if(seenInsertError)throw seenInsertError;
         if(requestLink){
           const {error:replyStatusError}=await admin.from("purchase_request_suppliers")
             .update({status:"replied",replied_at:receivedAt||new Date().toISOString()})
