@@ -99,8 +99,8 @@
     const b=$("gmailSyncNow"), out=$("gmailInboxList");
     try {
       if(b){b.disabled=true;b.textContent="Синхронизируем…";}
-      if(out)out.textContent="Проверяем Gmail и сохраняем новые ответы поставщиков…";
-      const result=await call("inbox");
+      if(out)out.textContent="Повторно проверяем последние 30 писем и сохраняем только ответы поставщиков…";
+      const result=await call("inbox",{force:true});
       await inbox();
       if(out)out.insertAdjacentHTML("afterbegin",'<div style="font-size:10px;color:#16856f;margin:6px 0">Синхронизация завершена · обработано писем: '+Number(result.synced||0)+'</div>');
     } catch(e) { if(out)out.textContent=e.message; }
