@@ -154,6 +154,11 @@ async function syncCompany(connection: any) {
       }
     } else console.error("Unable to save Gmail message", companyId, messageId, insertError.message);
   }
+  const { error: runSaveError } = await db.from("gmail_monitor_runs").upsert({
+    company_id: companyId, last_checked_at: new Date().toISOString(), status: "ok",
+    messages_saved: saved, last_error: null
+  }, { onConflict: "company_id" });
+  if (runSaveError) console.error("Unable to record Gmail monitor run", companyId, runSaveError.message);
   return { companyId, discovered: messageIds.length, saved };
 }
 
@@ -170,6 +175,10 @@ Deno.serve(async (req: Request) => {
       catch (e) {
         const message = e instanceof Error ? e.message : "Unknown Gmail monitor error";
         console.error("Gmail monitor failed for company", connection.company_id, message);
+        await db.from("gmail_monitor_runs").upsert({
+          company_id: connection.company_id, last_checked_at: new Date().toISOString(),
+          status: "error", messages_saved: 0, last_error: message.slice(0, 1000)
+        }, { onConflict: "company_id" });
         results.push({ companyId: connection.company_id, status: "error", error: message });
       }
     }
