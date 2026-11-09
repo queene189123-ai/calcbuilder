@@ -112,7 +112,7 @@ function parseText(text: string) {
   };
 }
 function xmlText(value: string) {
-  return value.replace(/<w:tab\\s*\\/>/g, " ").replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&#(\\d+);/g, (_, n) => String.fromCodePoint(Number(n))).replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16))).trim();
+  return value.replace(/<w:tab\s*\/>/g, " ").replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n))).replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16))).trim();
 }
 async function extractDocx(bytes: Uint8Array) {
   const zip = await JSZip.loadAsync(bytes);
@@ -120,22 +120,22 @@ async function extractDocx(bytes: Uint8Array) {
   if (!entry) throw new Error("В DOCX не найден основной текст документа.");
   const xml = await entry.async("string");
   const lines: string[] = [];
-  const tableRows = [...xml.matchAll(/<w:tr\\b[\\s\\S]*?<\\/w:tr>/g)].map(match => {
-    const cells = [...match[0].matchAll(/<w:tc\\b[\\s\\S]*?<\\/w:tc>/g)].map(cell => {
-      const parts = [...cell[0].matchAll(/<w:t(?:\\s[^>]*)?>([\\s\\S]*?)<\\/w:t>/g)].map(x => xmlText(x[1]));
+  const tableRows = [...xml.matchAll(/<w:tr\b[\s\S]*?<\/w:tr>/g)].map(match => {
+    const cells = [...match[0].matchAll(/<w:tc\b[\s\S]*?<\/w:tc>/g)].map(cell => {
+      const parts = [...cell[0].matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/g)].map(x => xmlText(x[1]));
       return parts.join(" ").trim();
     });
     return cells.some(Boolean) ? cells.join(" | ") : "";
   }).filter(Boolean);
   if (tableRows.length) lines.push(...tableRows);
   else {
-    for (const paragraph of xml.matchAll(/<w:p\\b[\\s\\S]*?<\\/w:p>/g)) {
-      const parts = [...paragraph[0].matchAll(/<w:t(?:\\s[^>]*)?>([\\s\\S]*?)<\\/w:t>/g)].map(x => xmlText(x[1]));
+    for (const paragraph of xml.matchAll(/<w:p\b[\s\S]*?<\/w:p>/g)) {
+      const parts = [...paragraph[0].matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/g)].map(x => xmlText(x[1]));
       const line = parts.join(" ").trim();
       if (line) lines.push(line);
     }
   }
-  return lines.join("\\n").slice(0, 50000);
+  return lines.join("\n").slice(0, 50000);
 }
 function decodeText(bytes: Uint8Array) {
   try { return new TextDecoder("utf-8", { fatal: true }).decode(bytes); }
