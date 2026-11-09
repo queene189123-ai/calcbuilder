@@ -516,6 +516,9 @@ create policy "company members can upload quote docs" on "storage"."objects" for
 insert into storage.buckets (id,name,public,file_size_limit,allowed_mime_types) values ("quote-documents","quote-documents",false,20971520,array["application/pdf","application/csv","application/vnd.ms-excel","text/csv","text/plain","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","application/msword","application/vnd.openxmlformats-officedocument.wordprocessingml.document","message/rfc822"]::text[]) on conflict (id) do update set name=excluded.name, public=excluded.public, file_size_limit=excluded.file_size_limit, allowed_mime_types=excluded.allowed_mime_types;
 
 -- Runtime grants. Internal Gmail tables remain inaccessible to client roles.
+revoke all privileges on all tables in schema public from anon;
+revoke all privileges on all sequences in schema public from anon;
+revoke all privileges on all functions in schema public from anon;
 grant all on all tables in schema public to service_role;
 grant select, insert, update, delete on all tables in schema public to authenticated;
 revoke all on public."company_gmail_connections", public."gmail_oauth_states", public."supplier_email_messages", public."gmail_monitor_config", public."gmail_monitor_runs", public."gmail_monitor_seen_messages" from anon, authenticated;
@@ -524,7 +527,9 @@ revoke execute on all functions in schema public from public, anon;
 grant execute on all functions in schema public to authenticated;
 grant execute on all functions in schema private to authenticated;
 revoke execute on all functions in schema private from public, anon;
-alter default privileges in schema public revoke all on tables from anon, authenticated;
+alter default privileges for role postgres in schema public revoke all on tables from anon, authenticated;
+alter default privileges for role postgres in schema public revoke all on sequences from anon, authenticated;
+alter default privileges for role postgres in schema public revoke execute on functions from anon, authenticated;
 
 -- Keep the trigger-only helper non-callable by application users.
 revoke execute on function private.add_company_creator_as_owner() from public, anon, authenticated;
