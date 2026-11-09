@@ -131,6 +131,10 @@ function renderDashboard(){
  const total=currencies.length<=1?comparisons.reduce((sum,x)=>sum+x.saving,0):null;
  if($('statOffers'))$('statOffers').textContent=offerCount;
  if($('statSaving'))$('statSaving').textContent=total===null?(comparisons.length?'Разные валюты':'—'):money(total,currencies[0]||'RUB');
+ if($('savingPotential'))$('savingPotential').textContent=total===null?(comparisons.length?'Разные валюты':'—'):money(total,currencies[0]||'RUB');
+ if($('savingOptions'))$('savingOptions').textContent=comparisons.length;
+ if($('savingSuppliers'))$('savingSuppliers').textContent=new Set((quoteOffers||[]).map(q=>q.supplier)).size;
+ if($('savingRisks'))$('savingRisks').textContent=comparisons.filter(x=>Number(x.best.lead)>5).length;
  $('dashPurchases').innerHTML=purchases.slice(0,4).map(p=>'<tr><td class="strong">'+eh(p.name)+'</td><td>'+p.vendors+'</td><td><span class="pill">'+eh(p.status)+'</span></td><td>'+eh(p.date)+'</td></tr>').join('')||'<tr><td colspan="4" class="empty">Создайте первую закупку</td></tr>';
  const recommendations=buildQuoteRecommendations();
  $('dashRecs').innerHTML=recommendations.length?recHtml(recommendations.slice(0,3)):'<div class="empty">Для расчёта экономии добавьте минимум два предложения по одной позиции.</div>';
@@ -140,7 +144,7 @@ function renderDashboard(){
    (comparisons.length?'<div class="activity"><i class="dot"></i><div><b>Есть варианты для экономии</b><small>Потенциальная разница по сопоставимым предложениям: '+(total===null?'разные валюты':money(total,currencies[0]||'RUB'))+'</small></div></div>':'<div class="activity"><i class="dot" style="background:#e5a13a"></i><div><b>Пока недостаточно КП для сравнения</b><small>Добавьте ещё одно предложение на ту же позицию.</small></div></div>')
   :'<div class="empty">Новых событий пока нет. Создайте закупку и соберите первые предложения поставщиков.</div>';
 }
-function renderAll(){renderMaterials();renderSuppliers();renderPurchases();renderDashboard();renderQuotes()}
+function renderAll(){renderMaterials();renderSuppliers();renderPurchases();renderDashboard();renderQuotes();renderPriceHistory()}
 function openPurchase(){
  const items=materials;
  const groups=[...new Set([...materialFolders,...items.map(m=>m.folder||'Без папки')])].map(name=>({name,items:items.filter(m=>(m.folder||'Без папки')===name)})).filter(g=>g.items.length);
@@ -285,7 +289,7 @@ async function loadCompanyQuotes(company){
   const supplier=supplierById.get(quote.supplier_id);
   const qty=Number(item.quantity??requestItem?.quantity)||1;
   const deliveryShare=deliveryByItemId.get(item.id)||0;
-  return [{id:item.id,dbQuoteId:quote.id,material,supplier:supplier?.name||'Поставщик',unitPrice:Number(item.unit_price)||0,qty,delivery:deliveryShare,vat:item.vat_included===true?'НДС включён':item.vat_included===false?'Без НДС':'Не указано',lead:Number(item.specification?.lead_time_days)||Number(quote.lead_time_days)||0,unit:item.unit||requestItem?.unit||'шт.',spec:spec||'Характеристики не указаны',status:'Получено из почты',source:item.source_excerpt||quote.notes||'Письмо поставщика',currency:quote.currency||'RUB'}];
+  return [{id:item.id,dbQuoteId:quote.id,material,supplier:supplier?.name||'Поставщик',unitPrice:Number(item.unit_price)||0,qty,delivery:deliveryShare,vat:item.vat_included===true?'НДС включён':item.vat_included===false?'Без НДС':'Не указано',lead:Number(item.specification?.lead_time_days)||Number(quote.lead_time_days)||0,unit:item.unit||requestItem?.unit||'шт.',spec:spec||'Характеристики не указаны',status:'Получено из почты',source:item.source_excerpt||quote.notes||'Письмо поставщика',currency:quote.currency||'RUB',createdAt:item.created_at||quote.created_at||null}];
  });
  localStorage.setItem('sp_quotes',JSON.stringify(quoteOffers));
  syncQuoteMaterialOptions(true);renderQuotes();
@@ -495,6 +499,11 @@ async function openDocumentReview(documentId){
   closeModal();await window.snabproRefreshQuotes?.();await renderUploadedDocuments();
   toast(docError?'КП добавлено в сравнение. Статус документа не обновился.':'КП подтверждено: добавлено позиций — '+quoteItems.length+'.');
  }); 
+}
+function renderPriceHistory(){
+ const el=$('priceHistoryRows');if(!el)return;
+ const rows=(quoteOffers||[]).filter(q=>q.createdAt&&Number.isFinite(Date.parse(q.createdAt))).sort((a,b)=>Date.parse(b.createdAt)-Date.parse(a.createdAt)).slice(0,100);
+ el.innerHTML=rows.length?rows.map(q=>'<tr><td>'+new Date(q.createdAt).toLocaleDateString('ru-RU')+'</td><td>'+eh(q.material)+'</td><td>'+eh(q.supplier)+'</td><td>'+money(q.unitPrice,q.currency)+' / '+eh(q.unit)+'</td><td>'+money(q.delivery,q.currency)+'</td><td class="strong">'+money(q.qty*q.unitPrice+q.delivery,q.currency)+'</td></tr>').join(''):'<tr><td colspan="6" class="empty">История появится после сохранения первых реальных коммерческих предложений.</td></tr>';
 }
 function buildManagementReport(){
  const all=quoteOffers,by={};all.forEach(q=>{const currency=q.currency||'RUB',key=q.material+'||'+currency;(by[key]??=[]).push({...q,currency,total:q.qty*q.unitPrice+q.delivery})});
