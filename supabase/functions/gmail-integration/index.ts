@@ -169,12 +169,15 @@ Deno.serve(async (req) => {
       const lines=Array.isArray(body.lines)?body.lines.slice(0,80):[];
       const currency=String(body.currency||"RUB").toUpperCase();
       const vatLabel=String(body.vatLabel||"").toLowerCase();
-      const deliveryCost=Math.max(0,Number(body.deliveryCost)||0);
+      const deliveryCost=Number(body.deliveryCost??0);
+      const messageId=String(body.messageId||"");
       if(!(await canManagePurchasing(companyId,user.id)))return json({error:"Для добавления КП нужны права владельца, администратора или закупщика."},403);
-      if(!documentId||!lines.length||!["RUB","USD","EUR"].includes(currency)||!["","yes","no","top"].includes(vatLabel))return json({error:"Проверьте документ, валюту и выбранные позиции."},400);
+      if(!documentId||!lines.length||!["RUB","USD","EUR"].includes(currency)||!["","yes","no","top"].includes(vatLabel)||!Number.isFinite(deliveryCost)||deliveryCost<0)return json({error:"Проверьте документ, валюту, доставку и выбранные позиции."},400);
       const {data:doc,error:docError}=await admin.from("quote_documents").select("id,request_id,supplier_id,extracted_data,original_filename").eq("company_id",companyId).eq("id",documentId).maybeSingle();
       if(docError)throw docError;
       if(!doc||!doc.request_id||!doc.supplier_id)return json({error:"Документ не привязан к поставщику и закупке. Сначала сопоставьте письмо."},400);
+      const sourceMessageId=String(doc.extracted_data?.gmail_message_id||"");
+      if(messageId&&messageId!==sourceMessageId)return json({error:"Письмо не соответствует выбранному документу."},400);
       const {data:existing,error:existingError}=await admin.from("supplier_quotes").select("id").eq("company_id",companyId).eq("document_id",documentId).limit(1);
       if(existingError)throw existingError;
       if(existing?.length)return json({ok:true,alreadyImported:true,saved:0,quoteId:existing[0].id});
@@ -184,6 +187,7 @@ Deno.serve(async (req) => {
       const extracted=doc.extracted_data||{};
       const sourceLines=Array.isArray(extracted.line_items)?extracted.line_items:[];
       const valid:any[]=[];
+      const seenLineIndexes=new Set<number>();
       for(const line of lines){
         const requestItemId=String(line.requestItemId||"");
         const quantity=Number(line.quantity),unitPrice=Number(line.unitPrice);
@@ -192,10 +196,13 @@ Deno.serve(async (req) => {
         if(itemError)throw itemError;
         if(!item)return json({error:"Одна из выбранных позиций не относится к закупке этого КП."},400);
         const lineIndex=Number(line.lineIndex);
-        if(!Number.isInteger(lineIndex)||lineIndex<0||lineIndex>=sourceLines.length)return json({error:"Не удалось определить исходную строку КП."},400);
+        if(!Number.isInteger(lineIndex)||lineIndex<0||lineIndex>=sourceLines.length||seenLineIndexes.has(lineIndex))return json({error:"Не удалось определить уникальную исходную строку КП."},400);
+        seenLineIndexes.add(lineIndex);
         valid.push({item,quantity,unitPrice,sourceLine:sourceLines[lineIndex]||{}});
       }
-      const lead=body.leadTimeDays===""||body.leadTimeDays==null?null:Math.max(0,Math.round(Number(body.leadTimeDays)));
+      const rawLead=body.leadTimeDays===""||body.leadTimeDays==null?null:Number(body.leadTimeDays);
+      if(rawLead!==null&&(!Number.isFinite(rawLead)||rawLead<0||rawLead>3650))return json({error:"Проверьте срок поставки."},400);
+      const lead=rawLead===null?null:Math.round(rawLead);
       const {data:quote,error:quoteError}=await admin.from("supplier_quotes").insert({company_id:companyId,request_id:doc.request_id,supplier_id:doc.supplier_id,document_id:documentId,currency,delivery_cost:deliveryCost,lead_time_days:lead,notes:"Импортировано из документа: "+String(doc.original_filename||"КП").slice(0,180)}).select("id").single();
       if(quoteError){
         if((quoteError as any).code==="23505"){
@@ -207,6 +214,10 @@ Deno.serve(async (req) => {
       const quoteItems=valid.map(({item,quantity,unitPrice,sourceLine})=>{const baseSpec=item.specification&&typeof item.specification==="object"&&!Array.isArray(item.specification)?item.specification:{text:String(item.specification||"")};return {company_id:companyId,quote_id:quote.id,request_item_id:item.id,description:item.description,specification:{...baseSpec,supplier_description:String(sourceLine.description||"").slice(0,500),supplier_specification:sourceLine.specification||{},vat_label:vatLabel},quantity,unit:String(sourceLine.unit||item.unit||"").slice(0,40)||null,unit_price:unitPrice,vat_included:vatLabel==="yes"?true:vatLabel==="no"||vatLabel==="top"?false:null,confidence:0.75,source_excerpt:String(sourceLine.source_excerpt||"").slice(0,1000)||null};});
       const {error:itemsError}=await admin.from("quote_items").insert(quoteItems);
       if(itemsError){await admin.from("supplier_quotes").delete().eq("company_id",companyId).eq("id",quote.id);throw itemsError;}
+      if(sourceMessageId){
+        const {error:messageUpdateError}=await admin.from("supplier_email_messages").update({processing_status:"parsed"}).eq("company_id",companyId).eq("gmail_message_id",sourceMessageId);
+        if(messageUpdateError)throw messageUpdateError;
+      }
       return json({ok:true,quoteId:quote.id,saved:quoteItems.length});
     }
     if (body.action === "save_quote") {
