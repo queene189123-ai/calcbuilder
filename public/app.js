@@ -538,7 +538,8 @@ async function openDocumentReview(documentId){
   const vatYes=!vatTop&&!vatNo&&/ндс/i.test(ex.vat||'');
   const makeRow=(i,itemId='',priceValue='',parsed=null)=>{
    const item=items.find(x=>x.id===itemId);
-   const rowItems=items.filter(x=>x.request_id===initialRequest);
+   const activeRequest=$('drRequest')?.value||initialRequest;
+   const rowItems=items.filter(x=>x.request_id===activeRequest);
    const description=parsed?.description||item?.description||'';
    const specification=parsed?.spec||item?.specification?.text||'';
    const requestMatches=requestItemMatch(description,specification,parsed?.unit||item?.unit||'',rowItems);
