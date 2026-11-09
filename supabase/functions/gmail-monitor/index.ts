@@ -76,6 +76,13 @@ function parseSupplierReply(text: string) {
     extraction_method: "rules_v1", needs_review: true
   };
 }
+async function recordRun(companyId: string, status: string, messagesSaved: number, lastError: string | null = null) {
+  const { error } = await db.from("gmail_monitor_runs").upsert({
+    company_id: companyId, last_checked_at: new Date().toISOString(),
+    status, messages_saved: messagesSaved, last_error: lastError
+  }, { onConflict: "company_id" });
+  if (error) console.error("Unable to record Gmail monitor run", companyId, error.message);
+}
 function header(headers: any[], name: string) {
   return headers.find(x => String(x.name || "").toLowerCase() === name.toLowerCase())?.value || "";
 }
@@ -89,14 +96,14 @@ async function syncCompany(connection: any) {
   const listed = await listResponse.json();
   if (!listResponse.ok) throw new Error(listed.error?.message || "Unable to list Gmail inbox");
   const messageIds = (listed.messages || []).map((m: any) => String(m.id)).filter(Boolean);
-  if (!messageIds.length) return { companyId, discovered: 0, saved: 0 };
+  if (!messageIds.length) { await recordRun(companyId, "ok", 0); return { companyId, discovered: 0, saved: 0 }; }
 
   const { data: existing, error: existingError } = await db.from("supplier_email_messages")
     .select("gmail_message_id").eq("company_id", companyId).in("gmail_message_id", messageIds);
   if (existingError) throw existingError;
   const known = new Set((existing || []).map((x: any) => x.gmail_message_id));
   const freshIds = messageIds.filter((id: string) => !known.has(id));
-  if (!freshIds.length) return { companyId, discovered: messageIds.length, saved: 0 };
+  if (!freshIds.length) { await recordRun(companyId, "ok", 0); return { companyId, discovered: messageIds.length, saved: 0 }; }
 
   const [{ data: suppliers, error: supplierError }, { data: links, error: linkError }] = await Promise.all([
     db.from("suppliers").select("id,name,email").eq("company_id", companyId),
@@ -154,11 +161,7 @@ async function syncCompany(connection: any) {
       }
     } else console.error("Unable to save Gmail message", companyId, messageId, insertError.message);
   }
-  const { error: runSaveError } = await db.from("gmail_monitor_runs").upsert({
-    company_id: companyId, last_checked_at: new Date().toISOString(), status: "ok",
-    messages_saved: saved, last_error: null
-  }, { onConflict: "company_id" });
-  if (runSaveError) console.error("Unable to record Gmail monitor run", companyId, runSaveError.message);
+  await recordRun(companyId, "ok", saved);
   return { companyId, discovered: messageIds.length, saved };
 }
 
@@ -175,10 +178,7 @@ Deno.serve(async (req: Request) => {
       catch (e) {
         const message = e instanceof Error ? e.message : "Unknown Gmail monitor error";
         console.error("Gmail monitor failed for company", connection.company_id, message);
-        await db.from("gmail_monitor_runs").upsert({
-          company_id: connection.company_id, last_checked_at: new Date().toISOString(),
-          status: "error", messages_saved: 0, last_error: message.slice(0, 1000)
-        }, { onConflict: "company_id" });
+        await recordRun(connection.company_id, "error", 0, message.slice(0, 1000));
         results.push({ companyId: connection.company_id, status: "error", error: message });
       }
     }
