@@ -190,15 +190,17 @@ Deno.serve(async (req) => {
         .select("role").eq("company_id", companyId).eq("user_id", user.id).maybeSingle();
       if (memberError) throw memberError;
       if (!member) return json({ error: "Нет доступа к предприятию." }, 403);
-      const [messageResult, supplierResult, requestResult] = await Promise.all([
+      const [messageResult, supplierResult, requestResult, monitorResult] = await Promise.all([
         admin.from("supplier_email_messages").select("id,gmail_message_id,supplier_id,request_id,from_email,subject,body_text,attachments,extracted_data,processing_status,received_at")
-          .eq("company_id", companyId).order("received_at", { ascending: false }).limit(50),
+          .eq("company_id", companyId).order("received_at", { ascending: false }).limit(30),
         admin.from("suppliers").select("id,name,email").eq("company_id", companyId),
-        admin.from("purchase_requests").select("id,title").eq("company_id", companyId)
+        admin.from("purchase_requests").select("id,title").eq("company_id", companyId),
+        admin.from("gmail_monitor_runs").select("last_checked_at,status,messages_saved,last_error").eq("company_id", companyId).maybeSingle()
       ]);
       if (messageResult.error) throw messageResult.error;
       if (supplierResult.error) throw supplierResult.error;
       if (requestResult.error) throw requestResult.error;
+      if (monitorResult.error) throw monitorResult.error;
       const supplierById = new Map((supplierResult.data || []).map((s: any) => [s.id, s]));
       const requestById = new Map((requestResult.data || []).map((r: any) => [r.id, r]));
       const requestIds = [...new Set((messageResult.data || []).map((m: any) => m.request_id).filter(Boolean))];
@@ -234,7 +236,7 @@ Deno.serve(async (req) => {
         requestTitle: requestById.get(m.request_id)?.title || null,
         requestItems: itemsByRequest.get(m.request_id) || []
       }));
-      return json({ messages, synced: messages.length, source: "database" });
+      return json({ messages, synced: messages.length, source: "database", monitor: monitorResult.data || null });
     }
     if (body.action === "inbox") {
       const companyId = String(body.companyId || "");
