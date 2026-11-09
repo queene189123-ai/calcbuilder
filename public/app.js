@@ -479,7 +479,6 @@ async function openDocumentReview(documentId){
  const deliveryMatch=textPreview.match(/Доставка[^0-9]{0,80}([\d\s]+(?:[,.][0-9]{2})?)\s*₽/i);
  const detectedDelivery=deliveryMatch?Number(deliveryMatch[1].replace(/\s/g,'').replace(',','.')):0;
   const vatTop=/ндс\s+сверху|плюс\s+ндс|\+\s*ндс/i.test(ex.vat||textPreview);
-  const vatTop=/ндс\s+сверху|плюс\s+ндс|\+\s*ндс/i.test(ex.vat||textPreview);
   const vatNo=!vatTop&&/без\s*ндс/i.test(ex.vat||textPreview);
   const vatYes=!vatTop&&!vatNo&&/ндс/i.test(ex.vat||'');
   const item=items.find(x=>x.id===itemId);
