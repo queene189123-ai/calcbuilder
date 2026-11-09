@@ -197,8 +197,14 @@ Deno.serve(async (req) => {
       }
       const lead=body.leadTimeDays===""||body.leadTimeDays==null?null:Math.max(0,Math.round(Number(body.leadTimeDays)));
       const {data:quote,error:quoteError}=await admin.from("supplier_quotes").insert({company_id:companyId,request_id:doc.request_id,supplier_id:doc.supplier_id,document_id:documentId,currency,delivery_cost:deliveryCost,lead_time_days:lead,notes:"Импортировано из документа: "+String(doc.original_filename||"КП").slice(0,180)}).select("id").single();
-      if(quoteError)throw quoteError;
-      const quoteItems=valid.map(({item,quantity,unitPrice,sourceLine})=>({company_id:companyId,quote_id:quote.id,request_item_id:item.id,description:item.description,specification:{...(item.specification||{}),supplier_description:String(sourceLine.description||"").slice(0,500),supplier_specification:sourceLine.specification||{},vat_label:vatLabel},quantity,unit:item.unit,unit_price:unitPrice,vat_included:vatLabel==="yes"?true:vatLabel==="no"||vatLabel==="top"?false:null,confidence:0.75,source_excerpt:String(sourceLine.source_excerpt||"").slice(0,1000)||null}));
+      if(quoteError){
+        if((quoteError as any).code==="23505"){
+          const {data:duplicate}=await admin.from("supplier_quotes").select("id").eq("company_id",companyId).eq("document_id",documentId).maybeSingle();
+          if(duplicate)return json({ok:true,alreadyImported:true,saved:0,quoteId:duplicate.id});
+        }
+        throw quoteError;
+      }
+      const quoteItems=valid.map(({item,quantity,unitPrice,sourceLine})=>({company_id:companyId,quote_id:quote.id,request_item_id:item.id,description:item.description,specification:{...(item.specification||{}),supplier_description:String(sourceLine.description||"").slice(0,500),supplier_specification:sourceLine.specification||{},vat_label:vatLabel},quantity,unit:String(sourceLine.unit||item.unit||"").slice(0,40)||null,unit_price:unitPrice,vat_included:vatLabel==="yes"?true:vatLabel==="no"||vatLabel==="top"?false:null,confidence:0.75,source_excerpt:String(sourceLine.source_excerpt||"").slice(0,1000)||null}));
       const {error:itemsError}=await admin.from("quote_items").insert(quoteItems);
       if(itemsError){await admin.from("supplier_quotes").delete().eq("company_id",companyId).eq("id",quote.id);throw itemsError;}
       return json({ok:true,quoteId:quote.id,saved:quoteItems.length});
