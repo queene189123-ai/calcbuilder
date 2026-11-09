@@ -255,7 +255,7 @@ window.snabproMarkDraftSent=draftId=>{
  const requestId=d.requestId||d.batchId;
  const batch=emailDrafts.filter(x=>(x.requestId||x.batchId)===requestId||x.batchId===requestId);
  const p=purchases.find(x=>x.dbId===requestId||x.draftBatch===requestId);
- if(p){p.vendors=batch.length;p.sent=batch.filter(x=>['Отправлено','Получен ответ'].includes(x.status)).length;p.replies=batch.filter(x=>x.status==='Получен ответ').length;p.status=p.replies===p.vendors?'Получены ответы':p.replies?'Есть ответы':p.sent===p.vendors?'Ожидаем ответы':'Черновики готовы';}
+ if(p){p.vendors=batch.length;p.sent=batch.filter(x=>['Отправлено','Получен ответ'].includes(x.status)).length;p.replies=batch.filter(x=>x.status==='Получен ответ').length;p.status=p.replies===p.vendors?'Получены ответы':p.replies?'Есть ответы':p.sent===p.vendors?'Ожидаем ответы':p.sent?'Частично отправлено':'Черновики готовы';}
  localStorage.setItem('sp_email_drafts',JSON.stringify(emailDrafts));
  if(p){save();renderPurchases();renderDashboard();}
 };
@@ -637,7 +637,7 @@ window.snabproLoadWorkspace=async function(company){
   purchases=(p.data||[]).map((x,i)=>{
    const linked=linkStatuses.get(x.id)||[],requestItems=(itemsByRequest.get(x.id)||[]).map((item,j)=>({id:materials.find(m=>m.dbId===item.material_id)?.id||null,dbId:item.id,materialDbId:item.material_id,name:item.description,spec:item.specification?.text||'',qty:Number(item.quantity),unit:item.unit,cat:item.specification?.category||''}));
    const replies=linked.filter(v=>v==='replied').length,sent=linked.filter(v=>v==='sent'||v==='replied').length;
-   return {id:i+1,dbId:x.id,name:x.title,items:x.details?.items||requestItems.map(v=>v.name+' · '+v.qty+' '+v.unit).join('; '),vendors:linked.length||x.details?.vendors||0,sent,replies,status:x.status==='completed'?'Завершена':x.status==='cancelled'?'Отменена':x.details?.source==='manual_quote_import'?'Есть КП':(linked.length&&replies===linked.length?'Получены ответы':replies?'Есть ответы':linked.length&&sent===linked.length?'Ожидаем ответы':linked.length?'Черновики готовы':'Черновик'),date:x.details?.date||new Date(x.created_at).toLocaleDateString('ru-RU'),requestItems,draftBatch:x.id};
+   return {id:i+1,dbId:x.id,name:x.title,items:x.details?.items||requestItems.map(v=>v.name+' · '+v.qty+' '+v.unit).join('; '),vendors:linked.length||x.details?.vendors||0,sent,replies,status:x.status==='completed'?'Завершена':x.status==='cancelled'?'Отменена':x.details?.source==='manual_quote_import'?'Есть КП':(linked.length&&replies===linked.length?'Получены ответы':replies?'Есть ответы':linked.length&&sent===linked.length?'Ожидаем ответы':sent?'Частично отправлено':linked.length?'Черновики готовы':'Черновик'),date:x.details?.date||new Date(x.created_at).toLocaleDateString('ru-RU'),requestItems,draftBatch:x.id};
   });
   emailDrafts=(links.data||[]).map(link=>{
    const supplier=(s.data||[]).find(v=>v.id===link.supplier_id),requestItems=itemsByRequest.get(link.request_id)||[];
