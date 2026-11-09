@@ -608,7 +608,7 @@ function renderPriceHistory(){
 }
 function buildManagementReport(){
  const all=quoteOffers,by={};all.forEach(q=>{const currency=q.currency||'RUB',key=[q.material,currency,q.qty,q.unit,q.vat||'Не указано'].join('||');(by[key]??=[]).push({...q,currency,total:q.qty*q.unitPrice+q.delivery})});
- const items=Object.values(by).filter(a=>a.length>=2).map(a=>{a.sort((x,y)=>x.total-y.total);return {m:a[0].material,currency:a[0].currency,best:a[0],worst:a[a.length-1],saving:a[a.length-1].total-a[0].total}});
+ const items=Object.values(by).filter(a=>a.length>=2&&['НДС включён','Без НДС'].includes(a[0].vat||'Не указано')).map(a=>{a.sort((x,y)=>x.total-y.total);return {m:a[0].material,currency:a[0].currency,best:a[0],worst:a[a.length-1],saving:a[a.length-1].total-a[0].total}});
  const currencies=[...new Set(items.map(x=>x.currency))],total=items.length&&currencies.length<=1?items.reduce((s,x)=>s+x.saving,0):null,el=$('managementReport');
  if(el)el.innerHTML=items.map(x=>'<div class="recommend"><div><h4>'+eh(x.m)+'</h4><p>Лучшее предложение: '+eh(x.best.supplier)+' · '+money(x.best.total,x.currency)+' с доставкой. Срок '+x.best.lead+' дн. Проверьте соответствие спецификации и наличие.</p></div><div class="saving">'+money(x.saving,x.currency)+'</div></div>').join('')||'<div class="empty">Добавьте коммерческие предложения для анализа.</div>';
  if($('reportSaving'))$('reportSaving').textContent=total===null?'—':money(total,currencies[0]||'RUB');if($('reportOffers'))$('reportOffers').textContent=new Set(all.map(q=>q.dbQuoteId||q.id)).size;if($('reportRisks'))$('reportRisks').textContent=items.filter(x=>x.best.lead>5).length;
