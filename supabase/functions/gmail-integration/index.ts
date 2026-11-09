@@ -250,11 +250,18 @@ Deno.serve(async (req) => {
       const { data: links, error: linksError } = await admin.from("purchase_request_suppliers")
         .select("request_id,supplier_id,supplier_email,subject_token").eq("company_id", companyId);
       if (linksError) throw linksError;
+      const messageIds=(messages.messages||[]).slice(0,30).map((m:any)=>String(m.id)).filter(Boolean);
+      const {data:seenRows,error:seenQueryError}=await admin.from("gmail_monitor_seen_messages").select("gmail_message_id").eq("company_id",companyId).in("gmail_message_id",messageIds);
+      if(seenQueryError)throw seenQueryError;
+      const seenSet=new Set((seenRows||[]).map((x:any)=>x.gmail_message_id));
+      const freshMessages=(messages.messages||[]).slice(0,30).filter((m:any)=>!seenSet.has(String(m.id)));
       const supplierByEmail = new Map((suppliers || []).filter((s: any) => s.email).map((s: any) => [String(s.email).trim().toLowerCase(), s]));
-      const items = await Promise.all((messages.messages || []).slice(0, 30).map(async (m: {id:string}) => {
+      const items = await Promise.all(freshMessages.map(async (m: {id:string}) => {
         const metaResponse = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/" + m.id + "?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date", { headers: { Authorization: "Bearer " + token } });
         const meta = await metaResponse.json();
         if (!metaResponse.ok) return null;
+        const {error:seenInsertError}=await admin.from("gmail_monitor_seen_messages").upsert({company_id:companyId,gmail_message_id:m.id,checked_at:new Date().toISOString()},{onConflict:"company_id,gmail_message_id",ignoreDuplicates:true});
+        if(seenInsertError)throw seenInsertError;
         const metaHeaders = meta.payload?.headers || [];
         const metaHeader = (name: string) => metaHeaders.find((x:any)=>String(x.name).toLowerCase()===name.toLowerCase())?.value || "";
         const from = metaHeader("From");
