@@ -39,6 +39,39 @@ begin
   join pg_namespace n on n.oid = t.relnamespace
   where n.nspname = 'public' and t.relkind = 'r' and t.relrowsecurity;
 
+  if exists (
+    with expected(table_name, expected_columns) as (
+      values
+        ('companies', 11),
+        ('company_gmail_connections', 7),
+        ('company_members', 4),
+        ('gmail_monitor_config', 3),
+        ('gmail_monitor_runs', 5),
+        ('gmail_monitor_seen_messages', 3),
+        ('gmail_oauth_states', 5),
+        ('material_folders', 5),
+        ('materials', 11),
+        ('purchase_request_items', 9),
+        ('purchase_request_suppliers', 14),
+        ('purchase_requests', 7),
+        ('quote_documents', 12),
+        ('quote_items', 15),
+        ('supplier_email_messages', 13),
+        ('supplier_quotes', 11),
+        ('suppliers', 12)
+    ),
+    actual as (
+      select table_name, count(*)::integer as actual_columns
+      from information_schema.columns
+      where table_schema = 'public'
+      group by table_name
+    )
+    select 1
+    from expected e
+    full outer join actual a using (table_name)
+    where e.expected_columns is distinct from a.actual_columns
+  ) then raise exception 'Public table/column layout differs from the reconstructed inventory'; end if;
+
   if v_tables <> 17 then raise exception 'Expected 17 public tables, found %', v_tables; end if;
   if v_columns <> 147 then raise exception 'Expected 147 public columns, found %', v_columns; end if;
   if v_constraints <> 75 then raise exception 'Expected 75 constraints, found %', v_constraints; end if;
