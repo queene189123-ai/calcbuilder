@@ -142,11 +142,8 @@ async function syncCompany(connection: any) {
     const supplier = requestLink?.supplier_id
       ? (suppliers || []).find((s: any) => s.id === requestLink.supplier_id)
       : supplierByEmail.get(fromEmail);
-    if (!requestLink && !supplier) {
-      await markSeen(companyId, messageId);
-      continue;
-    }
-
+    // Keep external messages from unknown senders too. They remain unassigned
+    // in the inbox so a buyer can review and map new suppliers instead of losing them.
     const response = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/" + encodeURIComponent(messageId) + "?format=full", {
       headers: { Authorization: "Bearer " + token }
     });
