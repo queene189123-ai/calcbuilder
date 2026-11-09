@@ -494,7 +494,7 @@ async function openDocumentReview(documentId){
   description:String(x.description||'').trim(),
   spec:typeof x.specification==='string'?x.specification:(x.specification?.text||''),
   quantity:Number(x.quantity||0),unit:String(x.unit||''),
-  price:Number(x.unit_price??x.price??0),total:Number(x.total||0)
+  price:Number(x.unit_price??x.price??(x.total&&x.quantity?x.total/x.quantity:0)),total:Number(x.total||0)
  })).filter(x=>x.description):[...textPreview.matchAll(/(\d{1,2})\s+(Лист.+?)\s+(\d+(?:[.,]\d+)?)\s+(лист|шт\.?|м|кг)\s+([\d\s]+,[0-9]{2})\s+([\d\s]+,[0-9]{2})/gi)].map(m=>({description:m[2].trim(),quantity:Number(m[3].replace(',','.')),unit:m[4],price:Number(m[5].replace(/\s/g,'').replace(',','.'))})).filter(x=>x.description&&x.quantity>0&&x.price>0);
  const priceMatches=[...textPreview.matchAll(/(?:^|\s)\d{1,2}\s+.{3,180}?\s+\d+(?:[.,]\d+)?\s+(?:лист|шт\.?|м|метр|упак\.?)\s+([\d\s]+[,.]\d{2})(?=\s|$)/gim)].map(m=>Number(m[1].replace(/\s/g,'').replace(',','.'))).filter(n=>n>0);
  const detectedRows=Math.max(parsedLineItems.length,(textPreview.match(/\b\d+\s*(?:лист(?:ов|а)?|шт\.?|м)\b/gi)||[]).length);
@@ -522,7 +522,7 @@ async function openDocumentReview(documentId){
     '<div class="field full"><label>Наличие / комментарий</label><input data-row-availability value="'+eh(ex.availability||'')+'" placeholder="Например, в наличии"></div></div>'+
     '<button class="btn" type="button" data-remove-quote-row>Удалить позицию</button></div>';
   };
- const rowCount=initialRequest===createRequestValue?Math.max(1,Math.min(12,detectedRows||priceMatches.length||1)):Math.max(1,requestItems.length);
+ const rowCount=initialRequest===createRequestValue?Math.max(1,Math.min(12,parsedLineItems.length||detectedRows||priceMatches.length||1)):Math.max(1,requestItems.length);
  const initialRows=Array.from({length:rowCount},(_,i)=>makeRow(i,initialRequest===createRequestValue?'':requestItems[i]?.id||'',parsedLineItems[i]?.price||priceMatches[i]||'',parsedLineItems[i]||null)).join('');
  modal('Проверка коммерческого предложения',
   '<div class="notice">Можно привязать КП к существующей закупке или создать новую прямо из документа. Для каждой строки проверьте наименование, характеристики, количество и цену. Новая закупка и её позиции создадутся только после нажатия «Подтвердить».</div>'+
