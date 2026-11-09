@@ -502,8 +502,8 @@ async function openDocumentReview(documentId){
   const sourceText=String(description+' '+specification).toLowerCase().replace(/ё/g,'е');
   const source=normalizeMatchText(sourceText),sourceSet=new Set(source);
   if(!sourceSet.size)return [];
-  const gradeOf=value=>(String(value||'').toLowerCase().replace(/ё/g,'е').match(/\\b(?:aisi\\s*)?\\d{3,5}[a-z]?\\b|\\bст\\s*\\d+[а-яa-z0-9]*\\b|\\b\\d{2}х\\d{2,3}н\\d{1,2}\\b/i)||[])[0]?.replace(/\\s+/g,'')||'';
-  const thicknessOf=value=>{const m=String(value||'').toLowerCase().replace(/,/g,'.').match(/(?:толщин[а-я]*\\s*[:=]?\\s*|\\bлист\\b[^\\n]{0,45}?)(\\d+(?:\\.\\d+)?)\\s*мм/i);return m?Number(m[1]):null;};
+  const gradeOf=value=>(String(value||'').toLowerCase().replace(/ё/g,'е').match(/\b(?:aisi\s*)?\d{3,5}[a-z]?\b|\bст\s*\d+[а-яa-z0-9]*\b|\b\d{2}х\d{2,3}н\d{1,2}\b/i)||[])[0]?.replace(/\s+/g,'')||'';
+  const thicknessOf=value=>{const m=String(value||'').toLowerCase().replace(/,/g,'.').match(/(?:толщин[а-я]*\s*[:=]?\s*|\bлист\b[^\n]{0,45}?)(\d+(?:\.\d+)?)\s*мм/i);return m?Number(m[1]):null;};
   return requestItems.map(item=>{
    const targetText=[item.description,item.specification?.text||''].join(' ').toLowerCase().replace(/ё/g,'е');
    const target=normalizeMatchText(targetText),targetSet=new Set(target);
@@ -512,8 +512,8 @@ async function openDocumentReview(documentId){
    const gradeA=gradeOf(sourceText),gradeB=gradeOf(targetText);
    const thickA=thicknessOf(sourceText),thickB=thicknessOf(targetText);
    const conflict=!!(gradeA&&gradeB&&gradeA!==gradeB)||(thickA!==null&&thickB!==null&&Math.abs(thickA-thickB)>0.01);
-   const unitA=String(unit||'').toLowerCase().replace(/\\./g,'');
-   const unitB=String(item.unit||'').toLowerCase().replace(/\\./g,'');
+   const unitA=String(unit||'').toLowerCase().replace(/\./g,'');
+   const unitB=String(item.unit||'').toLowerCase().replace(/\./g,'');
    const unitBonus=unitA&&unitB&&unitA===unitB?0.08:0;
    return {item,score:conflict?0:Math.min(1,dice+unitBonus),conflict};
   }).filter(x=>x.score>0.18).sort((a,b)=>b.score-a.score);
