@@ -89,8 +89,8 @@
       if(out)out.textContent="Загружаем письма, автоматически собранные системой…";
       const d=await call("saved_inbox"), items=d.messages||[];
       items.forEach(m=>{if(m.requestId&&m.fromEmail)window.snabproMarkReplyReceived?.(m.requestId,m.fromEmail);});
-      const matched=items.filter(m=>m.supplierName).length, linked=items.filter(m=>m.requestId).length;
-      out.innerHTML='<div style="font-size:11px;color:#78849a;margin:8px 0">Синхронизировано писем: '+items.length+' · распознано поставщиков: '+matched+' · привязано к заявкам: '+linked+'</div>'+
+      const matched=items.filter(m=>m.supplierName).length, linked=items.filter(m=>m.requestId).length, unmatched=items.filter(m=>!m.supplierName).length;
+      out.innerHTML='<div style="font-size:11px;color:#78849a;margin:8px 0">Синхронизировано писем: '+items.length+' · распознано поставщиков: '+matched+' · не сопоставлено: '+unmatched+' · привязано к заявкам: '+linked+'</div>'+
         (items.map(renderInboxMessage).join("")||"Новых входящих писем за последние 30 дней не найдено.");
       return d;
     } catch(e) { if(out)out.textContent=e.message; return null; }
@@ -101,7 +101,7 @@
     const b=$("gmailSyncNow"), out=$("gmailInboxList");
     try {
       if(b){b.disabled=true;b.textContent="Синхронизируем…";}
-      if(out)out.textContent="Повторно проверяем последние 30 писем и сохраняем только ответы поставщиков…";
+      if(out)out.textContent="Повторно проверяем последние 30 писем и сохраняем ответы поставщиков, включая новые адреса для ручной проверки…";
       const result=await call("inbox",{force:true});
       await inbox();
       if(out)out.insertAdjacentHTML("afterbegin",'<div style="font-size:10px;color:#16856f;margin:6px 0">Синхронизация завершена · обработано писем: '+Number(result.synced||0)+'</div>');
