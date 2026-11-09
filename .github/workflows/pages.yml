@@ -27,6 +27,11 @@ jobs:
         uses: actions/configure-pages@v5
         with:
           enablement: true
+      - name: Validate JavaScript
+        run: |
+          node --check public/app.js
+          node --check public/auth.js
+          node --check public/gmail.js
       - name: Upload static site
         uses: actions/upload-pages-artifact@v3
         with:
