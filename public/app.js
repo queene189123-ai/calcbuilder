@@ -498,6 +498,26 @@ async function openDocumentReview(documentId){
    return {material,score,gradeConflict,thicknessConflict};
   }).filter(x=>x.score>0.12).sort((a,b)=>b.score-a.score).slice(0,5);
  };
+ const requestItemMatch=(description,specification='',unit='')=>{
+  const sourceText=String(description+' '+specification).toLowerCase().replace(/ё/g,'е');
+  const source=normalizeMatchText(sourceText),sourceSet=new Set(source);
+  if(!sourceSet.size)return [];
+  const gradeOf=value=>(String(value||'').toLowerCase().replace(/ё/g,'е').match(/\\b(?:aisi\\s*)?\\d{3,5}[a-z]?\\b|\\bст\\s*\\d+[а-яa-z0-9]*\\b|\\b\\d{2}х\\d{2,3}н\\d{1,2}\\b/i)||[])[0]?.replace(/\\s+/g,'')||'';
+  const thicknessOf=value=>{const m=String(value||'').toLowerCase().replace(/,/g,'.').match(/(?:толщин[а-я]*\\s*[:=]?\\s*|\\bлист\\b[^\\n]{0,45}?)(\\d+(?:\\.\\d+)?)\\s*мм/i);return m?Number(m[1]):null;};
+  return requestItems.map(item=>{
+   const targetText=[item.description,item.specification?.text||''].join(' ').toLowerCase().replace(/ё/g,'е');
+   const target=normalizeMatchText(targetText),targetSet=new Set(target);
+   const common=[...sourceSet].filter(token=>targetSet.has(token)).length;
+   const dice=2*common/Math.max(1,sourceSet.size+targetSet.size);
+   const gradeA=gradeOf(sourceText),gradeB=gradeOf(targetText);
+   const thickA=thicknessOf(sourceText),thickB=thicknessOf(targetText);
+   const conflict=!!(gradeA&&gradeB&&gradeA!==gradeB)||(thickA!==null&&thickB!==null&&Math.abs(thickA-thickB)>0.01);
+   const unitA=String(unit||'').toLowerCase().replace(/\\./g,'');
+   const unitB=String(item.unit||'').toLowerCase().replace(/\\./g,'');
+   const unitBonus=unitA&&unitB&&unitA===unitB?0.08:0;
+   return {item,score:conflict?0:Math.min(1,dice+unitBonus),conflict};
+  }).filter(x=>x.score>0.18).sort((a,b)=>b.score-a.score);
+ };
  const catalogOptions=(matches,selected='')=>'<option value="">Не сопоставлять со справочником</option>'+matches.map(x=>'<option value="'+eh(x.material.id)+'" '+(x.material.id===selected?'selected':'')+'>'+eh(x.material.name)+' · '+Math.round(x.score*100)+'%</option>').join('');
  const supplierOptions=suppliersList.map(x=>'<option value="'+eh(x.id)+'" '+(x.id===doc.supplier_id?'selected':'')+'>'+eh(x.name)+'</option>').join('');
  const requestOptions='<option value="'+createRequestValue+'" '+(initialRequest===createRequestValue?'selected':'')+'>＋ Создать новую закупку из этого КП</option>'+requests.map(x=>'<option value="'+eh(x.id)+'" '+(x.id===initialRequest?'selected':'')+'>'+eh(x.title)+'</option>').join('');
@@ -517,24 +537,28 @@ async function openDocumentReview(documentId){
   const makeRow=(i,itemId='',priceValue='',parsed=null)=>{
    const item=items.find(x=>x.id===itemId);
    const rowItems=items.filter(x=>x.request_id===initialRequest);
-   const description=item?.description||parsed?.description||'';
-   const specification=item?.specification?.text||parsed?.spec||'';
+   const description=parsed?.description||item?.description||'';
+   const specification=parsed?.spec||item?.specification?.text||'';
+   const requestMatches=requestItemMatch(description,specification,parsed?.unit||item?.unit||'');
+   const autoItem=!item&&requestMatches[0]?.score>=0.72&&(!requestMatches[1]||requestMatches[0].score-requestMatches[1].score>=0.12)?requestMatches[0].item:null;
+   const selectedItem=item||autoItem;
+   const selectedItemId=selectedItem?.id||'';
    const matches=materialMatch(description,specification);
-   const linkedMaterial=item?.material_id||((matches[0]?.score||0)>=0.72?matches[0].material.id:'');
+   const linkedMaterial=selectedItem?.material_id||((matches[0]?.score||0)>=0.72?matches[0].material.id:'');
    return '<div class="dr-quote-row" data-quote-row data-material-id="'+eh(linkedMaterial)+'" style="border:1px solid var(--line,#ddd);border-radius:10px;padding:12px;margin:10px 0">'+
-    '<div class="field full"><label>Связать с позицией существующей закупки (необязательно)</label><select data-row-item><option value="">Без привязки — создать позицию из строки КП</option>'+itemOptions(rowItems,itemId)+'</select></div>'+
+    '<div class="field full"><label>Связать с позицией существующей закупки (необязательно)</label><select data-row-item><option value="">Без привязки — создать позицию из строки КП</option>'+itemOptions(rowItems,selectedItemId)+'</select></div>'+
     '<div class="field full"><label>Материал из справочника предприятия</label><select data-row-material>'+catalogOptions(matches,linkedMaterial)+'</select><div class="muted" data-match-hint style="font-size:12px;margin-top:4px">'+(matches.length?'Предложены совпадения по названию и характеристикам. Проверьте перед сохранением.':'Совпадение не найдено — позицию можно добавить без привязки.')+'</div></div>'+
     '<div class="formgrid"><div class="field full"><label>Материал / наименование позиции</label><input data-row-description value="'+eh(description)+'" placeholder="Например, Ст3сп лист 1500×6000"></div>'+
     '<div class="field full"><label>Характеристики</label><input data-row-spec value="'+eh(specification)+'" placeholder="Марка, толщина, размеры, стандарт"></div>'+
-    '<div class="field"><label>Количество</label><input data-row-quantity type="number" min="0.0001" step="0.0001" value="'+eh(item?.quantity??parsed?.quantity??'')+'" placeholder="20"></div>'+
-    '<div class="field"><label>Единица</label><input data-row-unit value="'+eh(item?.unit||parsed?.unit||'лист')+'" placeholder="лист, кг, м, шт."></div>'+
+    '<div class="field"><label>Количество</label><input data-row-quantity type="number" min="0.0001" step="0.0001" value="'+eh(parsed?.quantity??item?.quantity??'')+'" placeholder="20"></div>'+
+    '<div class="field"><label>Единица</label><input data-row-unit value="'+eh(parsed?.unit||item?.unit||'лист')+'" placeholder="лист, кг, м, шт."></div>'+
     '<div class="field"><label>Цена за единицу</label><input data-row-price type="number" min="0.0001" step="0.01" value="'+eh(priceValue)+'" placeholder="Введите цену"></div>'+
     '<div class="field"><label>Срок, дней</label><input data-row-lead type="number" min="0" value="'+eh(ex.lead_time_days||'')+'"></div>'+
     '<div class="field full"><label>Наличие / комментарий</label><input data-row-availability value="'+eh(ex.availability||'')+'" placeholder="Например, в наличии"></div></div>'+
     '<button class="btn" type="button" data-remove-quote-row>Удалить позицию</button></div>';
   };
- const rowCount=initialRequest===createRequestValue?Math.max(1,Math.min(12,parsedLineItems.length||detectedRows||priceMatches.length||1)):Math.max(1,requestItems.length);
- const initialRows=Array.from({length:rowCount},(_,i)=>makeRow(i,initialRequest===createRequestValue?'':requestItems[i]?.id||'',parsedLineItems[i]?.price||priceMatches[i]||'',parsedLineItems[i]||null)).join('');
+ const rowCount=parsedLineItems.length?Math.min(50,parsedLineItems.length):initialRequest===createRequestValue?Math.max(1,Math.min(12,detectedRows||priceMatches.length||1)):Math.max(1,requestItems.length);
+ const initialRows=Array.from({length:rowCount},(_,i)=>makeRow(i,parsedLineItems.length?'':requestItems[i]?.id||'',parsedLineItems[i]?.unit_price??parsedLineItems[i]?.price??priceMatches[i]??'',parsedLineItems[i]||null)).join('');
  modal('Проверка коммерческого предложения',
   '<div class="notice">Можно привязать КП к существующей закупке или создать новую прямо из документа. Для каждой строки проверьте наименование, характеристики, количество и цену. Новая закупка и её позиции создадутся только после нажатия «Подтвердить».</div>'+
   '<div class="formgrid">'+
@@ -574,9 +598,7 @@ async function openDocumentReview(documentId){
    const row=materialSelect.closest('[data-quote-row]'),material=catalogMaterials.find(x=>x.id===materialSelect.value);
    row.dataset.materialId=material?.id||'';
    if(material){
-    row.querySelector('[data-row-description]').value=material.name||'';
-    row.querySelector('[data-row-spec]').value=material.specification?.text||'';
-    row.querySelector('[data-row-unit]').value=material.unit||'шт.';
+    row.querySelector('[data-row-material]').title='Сопоставлено со справочником: '+(material.name||'');
    }
    return;
   }
@@ -584,10 +606,6 @@ async function openDocumentReview(documentId){
   const row=sel.closest('[data-quote-row]');
   if(!sel.value){row.dataset.materialId='';refreshMaterialSuggestions(row);return;}
   const item=items.find(x=>x.id===sel.value);if(!item)return;
-  row.querySelector('[data-row-description]').value=item.description||'';
-  row.querySelector('[data-row-spec]').value=item.specification?.text||'';
-  row.querySelector('[data-row-quantity]').value=item.quantity??'';
-  row.querySelector('[data-row-unit]').value=item.unit||'шт.';
   row.dataset.materialId=item.material_id||'';
   refreshMaterialSuggestions(row);
  });
