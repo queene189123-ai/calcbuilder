@@ -379,7 +379,7 @@ function openQuoteImport(){
     if(error)throw error;
     closeModal();
    }catch(error){btn.disabled=false;btn.textContent='Сохранить КП';toast('Не удалось сохранить КП: '+(error.message||'ошибка'));return;}
-   try{await window.snabproRefreshQuotes?.();toast('КП сохранено в базе предприятия и добавлено в сравнение');}
+   try{await window.snabproLoadWorkspace?.(company);toast('КП сохранено в базе предприятия и добавлено в сравнение');}
    catch(refreshError){toast('КП сохранено. Не удалось обновить экран — обновите страницу.');}
    return;
   }
