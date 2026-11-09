@@ -107,7 +107,11 @@ Deno.serve(async (req: Request) => {
     if (!member || !["owner", "admin", "buyer"].includes(String(member.role))) return json({ error: "Нет прав на загрузку КП в это предприятие." }, 403);
 
     const bytes = new Uint8Array(await file.arrayBuffer());
-    const mime = file.type || "application/octet-stream";
+    const inferredMime: Record<string,string> = {
+      pdf: "application/pdf", xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      xls: "application/vnd.ms-excel", csv: "text/csv", txt: "text/plain", eml: "message/rfc822"
+    };
+    const mime = file.type && file.type !== "application/octet-stream" ? file.type : (inferredMime[ext] || "application/octet-stream");
     const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, "_");
     storagePath = companyId + "/manual/" + crypto.randomUUID() + "_" + safeName;
     const uploaded = await db.storage.from("quote-documents").upload(storagePath, bytes, { contentType: mime, upsert: false });
