@@ -49,7 +49,7 @@ function parseLineItems(text: string) {
     quantity: ["количество", "кол-во", "кол.", "qty", "quantity"],
     unit: ["ед.", "ед изм", "единица", "единица измерения", "unit"],
     unit_price: ["цена", "цена за", "стоимость за", "price", "unit price"],
-    total: ["сумма", "итого", "стоимость", "total", "amount"]
+    total: ["сумма", "итого", "общая стоимость", "total", "amount"]
   };
   const norm = (s: string) => s.toLowerCase().replace(/ё/g, "е").replace(/[^a-zа-я0-9]+/g, " ").trim();
   let header: Record<string, number> | null = null;
