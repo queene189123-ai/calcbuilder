@@ -40,7 +40,7 @@ function detectCurrency(value: string) {
   return null;
 }
 function parseLineItems(text: string) {
-  const rows = text.split(/\r?\n/).map(line => line.split(/\s*\|\s*/).map(cell => cell.trim()).filter(Boolean)).filter(row => row.length >= 2);
+  const rows = text.split(/\r?\n/).map(line => line.split(/\s*\|\s*/).map(cell => cell.trim())).filter(row => row.some(Boolean));
   const items: any[] = [];
   const aliases: Record<string, string[]> = {
     description: ["наименование", "товар", "материал", "позиция", "номенклатура", "описание", "product", "item", "name"],
@@ -124,7 +124,7 @@ async function extractFile(bytes: Uint8Array, filename: string, mime: string) {
       lines.push("Лист: " + sheetName);
       const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, raw: false, blankrows: false }) as unknown[][];
       for (const row of rows.slice(0, 1500)) {
-        const cells = row.map(value => String(value ?? "").trim()).filter(Boolean);
+        const cells = row.map(value => String(value ?? "").trim());
         if (cells.length) lines.push(cells.join(" | "));
       }
       if (lines.join("\n").length > 50000) break;
