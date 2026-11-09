@@ -176,6 +176,9 @@ Deno.serve(async (req) => {
       const {data:doc,error:docError}=await admin.from("quote_documents").select("id,request_id,supplier_id,extracted_data,original_filename").eq("company_id",companyId).eq("id",documentId).maybeSingle();
       if(docError)throw docError;
       if(!doc||!doc.request_id||!doc.supplier_id)return json({error:"Документ не привязан к поставщику и закупке. Сначала сопоставьте письмо."},400);
+      const {data:docSupplier,error:docSupplierError}=await admin.from("suppliers").select("id").eq("company_id",companyId).eq("id",doc.supplier_id).maybeSingle();
+      if(docSupplierError)throw docSupplierError;
+      if(!docSupplier)return json({error:"Поставщик документа не принадлежит текущему предприятию."},400);
       const sourceMessageId=String(doc.extracted_data?.gmail_message_id||"");
       if(messageId&&messageId!==sourceMessageId)return json({error:"Письмо не соответствует выбранному документу."},400);
       const {data:existing,error:existingError}=await admin.from("supplier_quotes").select("id").eq("company_id",companyId).eq("document_id",documentId).limit(1);
