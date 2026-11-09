@@ -9,6 +9,7 @@
 ## Security notes
 
 - The Gmail connection, OAuth state, incoming-message, and monitor tables have explicit deny-all policies for `anon` and `authenticated`; server-side Edge Functions access them with the service role only after membership checks.
+- Legacy `gmail-attachment-reader` and `gmail-attachment-parser` endpoints are retired (HTTP 410) and require JWT at the gateway; the frontend uses only `gmail-attachment-reader-v2`.
 - Quote headers/items, quote documents, and quote-document Storage mutations are restricted by RLS to company roles `owner`, `admin`, and `buyer`; all company members retain read access. The role policy migration is `20261109083319_restrict_quote_writes_to_buyers.sql`.
 - Privileged implementations of `create_company_for_current_user` and `create_manual_quote` live in the unexposed `private` schema as `SECURITY DEFINER` functions with an empty `search_path`. The public RPC names are thin `SECURITY INVOKER` wrappers used by the existing frontend. `anon` has no execute permission; `authenticated` can call the wrappers, while the private implementations validate `auth.uid()` and, for manual quotes, the `owner`/`admin`/`buyer` company role.
 - Supabase Auth's leaked-password protection is currently disabled in project settings and should be enabled in the Supabase Dashboard before public customer onboarding.
