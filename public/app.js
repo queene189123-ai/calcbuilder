@@ -321,7 +321,7 @@ async function loadCompanyQuotes(company){
   const supplier=supplierById.get(quote.supplier_id);
   const qty=Number(item.quantity??requestItem?.quantity)||1;
   const deliveryShare=deliveryByItemId.get(item.id)||0;
-  return [{id:item.id,dbQuoteId:quote.id,material,supplier:supplier?.name||'Поставщик',unitPrice:Number(item.unit_price)||0,qty,delivery:deliveryShare,vat:item.vat_included===true?'НДС включён':item.vat_included===false?(item.specification?.vat_label==='top'?'НДС сверху':'Без НДС'):'Не указано',lead:Number(item.specification?.lead_time_days)||Number(quote.lead_time_days)||0,unit:item.unit||requestItem?.unit||'шт.',spec:spec||'Характеристики не указаны',status:'Получено из почты',source:item.source_excerpt||quote.notes||'Письмо поставщика',currency:quote.currency||'RUB',createdAt:item.created_at||quote.created_at||null}];
+  return [{id:item.id,dbQuoteId:quote.id,material,supplier:supplier?.name||'Поставщик',unitPrice:Number(item.unit_price)||0,qty,delivery:deliveryShare,vat:item.vat_included===true?'НДС включён':item.vat_included===false?(item.specification?.vat_label==='top'?'НДС сверху':'Без НДС'):'Не указано',lead:Number(item.specification?.lead_time_days)||Number(quote.lead_time_days)||0,unit:item.unit||requestItem?.unit||'шт.',spec:spec||'Характеристики не указаны',status:item.source_excerpt==='Ручной ввод'?'Добавлено вручную':'Получено из почты',source:item.source_excerpt||quote.notes||'Письмо поставщика',currency:quote.currency||'RUB',createdAt:item.created_at||quote.created_at||null}];
  });
  localStorage.setItem('sp_quotes',JSON.stringify(quoteOffers));
  syncQuoteMaterialOptions(true,true);renderQuotes();renderPriceHistory();renderDashboard();
