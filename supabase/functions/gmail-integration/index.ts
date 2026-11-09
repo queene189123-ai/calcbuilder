@@ -315,6 +315,8 @@ Deno.serve(async (req) => {
     }
     return json({ error: "Неизвестное действие." }, 400);
   } catch (e) {
-    return json({ error: e instanceof Error ? e.message : "Внутренняя ошибка Gmail." }, 500);
+    const message=e instanceof Error?e.message:"Внутренняя ошибка Gmail.";
+    const status=/^(Нужно войти|Сессия недействительна)/.test(message)?401:500;
+    return json({ error: message }, status);
   }
 });
