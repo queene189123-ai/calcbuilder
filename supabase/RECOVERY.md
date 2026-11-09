@@ -7,7 +7,7 @@ Inspected directly from Supabase project `tdewylpxanviyhdwdnci` on 2026-11-09. T
 - 17 tables in `public`
 - 4 helper/privileged functions in `private`
 - 2 public RPC wrappers
-- 19 RLS policies
+- 28 public RLS policies plus 4 Storage policies (32 total)
 - 75 table constraints
 - 62 indexes
 - Storage bucket: `quote-documents`
@@ -51,7 +51,7 @@ Inspected directly from Supabase project `tdewylpxanviyhdwdnci` on 2026-11-09. T
 
 ## Recovery finding
 
-The GitHub commit history for `supabase/migrations` contains only the 11 migration files added on 2026-11-09. The nine migrations dated 2026-11-04 and 2026-11-05 are recorded in the live Supabase migration ledger but their SQL files were never committed to this repository. They cannot be restored byte-for-byte from the repository's current path history. The 11 remaining filenames have been aligned with the exact versions in the live migration ledger.
+The GitHub commit history for `supabase/migrations` contains only the 11 migration files added on 2026-11-09. The nine migrations dated 2026-11-04 and 2026-11-05 are recorded in the live Supabase migration ledger but their SQL files were never committed to this repository. They cannot be restored byte-for-byte from the repository's current path history. The 12 remaining filenames have been aligned with the exact versions in the live migration ledger.
 
 Do not fabricate those files and label them as original migrations. A reconstructed SQL baseline has now been generated at `supabase/reconstructed/20261109_live_schema_baseline.sql` from the live schema. It includes 147 columns, 75 constraints, 35 non-constraint indexes, 32 public/storage policies, 6 functions, the company-owner trigger, the `quote-documents` bucket and runtime grants. A separate environment-specific script configures the Gmail monitor. This is a best-effort reconstruction, not the original migration history. It has not yet been applied to a disposable Supabase project; the live database remains authoritative until an isolated clean deployment and parity checks pass. See `supabase/reconstructed/README.md` for the safe bootstrap procedure and `supabase/reconstructed/verify_baseline.sql` for a read-only post-deployment parity check. The verifier has passed against the current live schema; it has not yet been run on a separate clean project.
 
