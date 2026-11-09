@@ -500,13 +500,13 @@ async function openDocumentReview(documentId){
    return {material,score,gradeConflict,thicknessConflict};
   }).filter(x=>x.score>0.12).sort((a,b)=>b.score-a.score).slice(0,5);
  };
- const requestItemMatch=(description,specification='',unit='')=>{
+ const requestItemMatch=(description,specification='',unit='',candidates=requestItems)=>{
   const sourceText=String(description+' '+specification).toLowerCase().replace(/ё/g,'е');
   const source=normalizeMatchText(sourceText),sourceSet=new Set(source);
   if(!sourceSet.size)return [];
   const gradeOf=value=>(String(value||'').toLowerCase().replace(/ё/g,'е').match(/\b(?:aisi\s*)?\d{3,5}[a-z]?\b|\bст\s*\d+[а-яa-z0-9]*\b|\b\d{2}х\d{2,3}н\d{1,2}\b/i)||[])[0]?.replace(/\s+/g,'')||'';
   const thicknessOf=value=>{const m=String(value||'').toLowerCase().replace(/,/g,'.').match(/(?:толщин[а-я]*\s*[:=]?\s*|\bлист\b[^\n]{0,45}?)(\d+(?:\.\d+)?)\s*мм/i);return m?Number(m[1]):null;};
-  return requestItems.map(item=>{
+  return candidates.map(item=>{
    const targetText=[item.description,item.specification?.text||''].join(' ').toLowerCase().replace(/ё/g,'е');
    const target=normalizeMatchText(targetText),targetSet=new Set(target);
    const common=[...sourceSet].filter(token=>targetSet.has(token)).length;
@@ -541,7 +541,7 @@ async function openDocumentReview(documentId){
    const rowItems=items.filter(x=>x.request_id===initialRequest);
    const description=parsed?.description||item?.description||'';
    const specification=parsed?.spec||item?.specification?.text||'';
-   const requestMatches=requestItemMatch(description,specification,parsed?.unit||item?.unit||'');
+   const requestMatches=requestItemMatch(description,specification,parsed?.unit||item?.unit||'',rowItems);
    const autoItem=!item&&requestMatches[0]?.score>=0.72&&(!requestMatches[1]||requestMatches[0].score-requestMatches[1].score>=0.12)?requestMatches[0].item:null;
    const selectedItem=item||autoItem;
    const selectedItemId=selectedItem?.id||'';
@@ -581,9 +581,14 @@ async function openDocumentReview(documentId){
   rowsEl.querySelectorAll('[data-row-item]').forEach(sel=>{
    const old=sel.value;sel.innerHTML='<option value="">Без привязки — создать позицию из строки КП</option>'+itemOptions(list,old);
    if(old&&!list.some(x=>x.id===old))sel.value='';
+   if(!sel.value){
+    const row=sel.closest('[data-quote-row]');
+    const suggestion=requestItemMatch(row?.querySelector('[data-row-description]')?.value||'',row?.querySelector('[data-row-spec]')?.value||'',row?.querySelector('[data-row-unit]')?.value||'',list);
+    if(suggestion[0]?.score>=0.72&&(!suggestion[1]||suggestion[0].score-suggestion[1].score>=0.12))sel.value=suggestion[0].item.id;
+   }
   });
  };
- $('drRequest').addEventListener('change',refreshRowOptions);
+ $('drRequest').addEventListener('change',()=>{refreshRowOptions();refreshPriceChecks();});
  const refreshPriceChecks=()=>{
   rowsEl.querySelectorAll('[data-quote-row]').forEach(row=>{
    const quantity=Number(row.querySelector('[data-row-quantity]').value||0);
