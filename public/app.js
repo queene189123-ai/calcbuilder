@@ -456,7 +456,7 @@ async function renderUploadedDocuments(prefetched){
 async function openDocumentReview(documentId){
  const client=window.snabproClient,company=window.snabproGetCompany?.();
  if(!client||!company?.id){toast('Сначала войдите в предприятие');return;}
- const [docRes,supplierRes,requestRes,itemRes]=await Promise.all([
+ const [docRes,supplierRes,requestRes,itemRes,materialRes]=await Promise.all([
   client.from('quote_documents').select('*').eq('id',documentId).eq('company_id',company.id).single(),
   client.from('suppliers').select('id,name,email').eq('company_id',company.id).order('name'),
   client.from('purchase_requests').select('id,title,status').eq('company_id',company.id).order('created_at',{ascending:false}),
@@ -472,7 +472,7 @@ async function openDocumentReview(documentId){
  const textPreview=ex.text_preview||'';
  const currency=candidate.currency||'RUB';
  const itemOptions=(list,selected='')=>list.map(x=>'<option value="'+eh(x.id)+'" '+(x.id===selected?'selected':'')+'>'+eh(x.description)+' · '+eh(x.quantity)+' '+eh(x.unit)+'</option>').join('');
- const normalizeMatchText=value=>String(value||'').toLowerCase().replace(/ё/g,'е').replace(/[×х]/g,'x').replace(/[^a-zа-я0-9.]+/g,' ').trim().split(/\\s+/).filter(token=>token.length>1);
+ const normalizeMatchText=value=>String(value||'').toLowerCase().replace(/ё/g,'е').replace(/[×х]/g,'x').replace(/[^a-zа-я0-9.]+/g,' ').trim().split(/\s+/).filter(token=>token.length>1);
  const materialMatch=(description,specification='')=>{
   const source=normalizeMatchText(description+' '+specification);
   if(!source.length)return [];
