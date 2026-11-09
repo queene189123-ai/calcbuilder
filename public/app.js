@@ -414,6 +414,29 @@ function copyDraft(i){
  if(navigator.clipboard?.writeText)navigator.clipboard.writeText(text).then(()=>toast('Текст письма скопирован')).catch(()=>toast('Не удалось скопировать текст'));
  else toast('Скопируйте текст из окна письма');
 }
+async function importQuoteFile(){
+ const input=$('quoteFile'),file=input?.files?.[0];
+ if(!file){toast('Выберите файл коммерческого предложения');return;}
+ const client=window.snabproClient,company=window.snabproGetCompany?.();
+ if(!client||!company?.id){toast('Сначала войдите и выберите предприятие');return;}
+ if(!window.snabproWorkspaceReady){toast('Дождитесь загрузки данных предприятия');return;}
+ if(file.size<=0||file.size>15*1024*1024){toast('Размер файла должен быть до 15 МБ');return;}
+ const ext=file.name.toLowerCase().split('.').pop();
+ if(!['pdf','xlsx','xls','csv','txt','eml'].includes(ext)){toast('Поддерживаются PDF, XLSX, XLS, CSV, TXT и EML');return;}
+ const btn=document.querySelector('button[onclick="importQuoteFile()"]');
+ if(btn){btn.disabled=true;btn.textContent='Загружаем и извлекаем…';}
+ try{
+  const form=new FormData();form.append('companyId',company.id);form.append('file',file,file.name);
+  const {data,error}=await client.functions.invoke('quote-document-parser',{body:form});
+  if(error)throw error;
+  if(!data?.ok)throw new Error(data?.error||'Не удалось обработать файл');
+  await renderUploadedDocuments();
+  input.value='';
+  if(data.extractionStatus==='review')toast('Файл сохранён. Проверьте извлечённые данные и подтвердите КП.');
+  else toast('Файл сохранён, но текст не извлечён. Можно заполнить КП вручную.');
+ }catch(error){toast('Ошибка обработки файла: '+(error.message||'попробуйте ещё раз'));}
+ finally{if(btn){btn.disabled=false;btn.textContent='Обработать файл';}}
+}
 async function renderUploadedDocuments(prefetched){
  const el=$('uploadedDocs');if(!el)return;
  const company=window.snabproGetCompany?.(),client=window.snabproClient;
