@@ -7,7 +7,7 @@
 - **Frontend:** статический сайт в каталоге `public`, публикация через GitHub Pages.
 - **Backend:** Supabase Auth, Postgres, Storage и Edge Functions. SQL-изменения находятся в `supabase/migrations/`, исходники серверных функций — в `supabase/functions/`.
 - **Почта:** Gmail OAuth; refresh-токены хранятся в зашифрованном виде в Supabase.
-- **Файлы КП:** приватный Storage bucket `quote-documents`.
+- **Файлы КП:** приватный Storage bucket `quote-documents`; ручная загрузка и извлечение через `quote-document-parser`.
 - **Изоляция данных:** данные предприятий разделены по `company_id`; таблицы защищены RLS.
 
 ## Реализовано
