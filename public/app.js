@@ -596,8 +596,8 @@ async function openDocumentReview(documentId){
     else messages.push('Сумма проверена: '+quotedTotal.toLocaleString('ru-RU'));
    }else if(quotedTotal>0)messages.push('Сумма в документе: '+quotedTotal.toLocaleString('ru-RU')+'. Заполните количество и цену для проверки.');
    if(linked){
-    const quoteUnit=String(row.querySelector('[data-row-unit]').value||'').toLowerCase().replace(/\\./g,'');
-    const requestedUnit=String(linked.unit||'').toLowerCase().replace(/\\./g,'');
+    const quoteUnit=String(row.querySelector('[data-row-unit]').value||'').toLowerCase().replace(/\./g,'');
+    const requestedUnit=String(linked.unit||'').toLowerCase().replace(/\./g,'');
     if(quantity>0&&Number(linked.quantity)>0&&Math.abs(quantity-Number(linked.quantity))>0.0001||quoteUnit&&requestedUnit&&quoteUnit!==requestedUnit){
      messages.push('В закупке запрошено '+linked.quantity+' '+(linked.unit||'')+', в КП указано '+quantity+' '+(row.querySelector('[data-row-unit]').value||'')+'. Проверьте объём и единицу измерения.');
     }
