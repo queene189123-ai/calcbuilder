@@ -98,7 +98,7 @@ async function syncCompany(connection: any) {
   const messageIds = (listed.messages || []).map((m: any) => String(m.id)).filter(Boolean);
   if (!messageIds.length) { await recordRun(companyId, "ok", 0); return { companyId, discovered: 0, saved: 0 }; }
 
-  const { data: existing, error: existingError } = await db.from("supplier_email_messages")
+  const { data: existing, error: existingError } = await db.from("gmail_monitor_seen_messages")
     .select("gmail_message_id").eq("company_id", companyId).in("gmail_message_id", messageIds);
   if (existingError) throw existingError;
   const known = new Set((existing || []).map((x: any) => x.gmail_message_id));
@@ -120,6 +120,10 @@ async function syncCompany(connection: any) {
     });
     const metadata = await metadataResponse.json();
     if (!metadataResponse.ok) continue;
+    const { error: seenError } = await db.from("gmail_monitor_seen_messages").upsert({
+      company_id: companyId, gmail_message_id: messageId, checked_at: new Date().toISOString()
+    }, { onConflict: "company_id,gmail_message_id", ignoreDuplicates: true });
+    if (seenError) throw seenError;
     const headers = metadata.payload?.headers || [];
     const from = header(headers, "From");
     const fromEmail = (from.match(/<([^>]+)>/)?.[1] || from).trim().toLowerCase();
