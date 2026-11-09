@@ -490,7 +490,7 @@ async function openDocumentReview(documentId){
     '<div class="field full"><label>Характеристики</label><input data-row-spec value="'+eh(item?.specification?.text||'')+'" placeholder="Марка, толщина, размеры, стандарт"></div>'+
     '<div class="field"><label>Количество</label><input data-row-quantity type="number" min="0.0001" step="0.0001" value="'+eh(item?.quantity??parsed?.quantity??'')+'" placeholder="20"></div>'+
     '<div class="field"><label>Единица</label><input data-row-unit value="'+eh(item?.unit||parsed?.unit||'лист')+'" placeholder="лист, кг, м, шт."></div>'+
-    '<div class="field"><label>Цена за единицу, ₽</label><input data-row-price type="number" min="0.0001" step="0.01" value="'+eh(priceValue)+'" placeholder="Введите цену"></div>'+
+    '<div class="field"><label>Цена за единицу</label><input data-row-price type="number" min="0.0001" step="0.01" value="'+eh(priceValue)+'" placeholder="Введите цену"></div>'+
     '<div class="field"><label>Срок, дней</label><input data-row-lead type="number" min="0" value="'+eh(ex.lead_time_days||'')+'"></div>'+
     '<div class="field full"><label>Наличие / комментарий</label><input data-row-availability value="'+eh(ex.availability||'')+'" placeholder="Например, в наличии"></div></div>'+
     '<button class="btn" type="button" data-remove-quote-row>Удалить позицию</button></div>';
@@ -504,7 +504,7 @@ async function openDocumentReview(documentId){
   '<div class="field full"><label>Закупка</label><select id="drRequest">'+requestOptions+'</select></div>'+
   '<div class="field"><label>Название новой закупки</label><input id="drNewTitle" value="'+eh('КП · '+(suppliersList.find(x=>x.id===doc.supplier_id)?.name||doc.original_filename||'Новая закупка'))+'"></div>'+
   '<div class="field"><label>Валюта</label><select id="drCurrency"><option '+(currency==='RUB'?'selected':'')+' value="RUB">RUB · ₽</option><option '+(currency==='USD'?'selected':'')+' value="USD">USD · $</option><option '+(currency==='EUR'?'selected':'')+' value="EUR">EUR · €</option></select></div>'+
-  '<div class="field"><label>Доставка, ₽</label><input id="drDelivery" type="number" min="0" step="0.01" value="'+eh(ex.delivery_cost||detectedDelivery||'0')+'"></div>'+
+  '<div class="field"><label>Доставка</label><input id="drDelivery" type="number" min="0" step="0.01" value="'+eh(ex.delivery_cost||detectedDelivery||'0')+'"></div>'+
   '<div class="field"><label>НДС</label><select id="drVat"><option value="">Не указано</option><option value="yes" '+(vatYes?'selected':'')+'>Включён</option><option value="no" '+(vatNo?'selected':'')+'>Без НДС</option><option value="top" '+(vatTop?'selected':'')+'>НДС сверху — ставка уточняется</option></select></div>'+
   '<div class="field full"><label>Позиции коммерческого предложения</label><div id="drQuoteRows">'+initialRows+'</div><button class="btn" type="button" id="drAddRow">＋ Добавить позицию</button></div>'+
   '<div class="field full"><label>Фрагмент документа</label><textarea readonly rows="7" style="width:100%;font:12px/1.5 inherit">'+eh(textPreview.slice(0,7000)||doc.extraction_error||'Текст документа не извлечён. Заполните данные вручную.')+'</textarea></div>'+
