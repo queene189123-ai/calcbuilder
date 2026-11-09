@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import * as XLSX from "npm:xlsx@0.18.5";
+import JSZip from "npm:jszip@3.10.1";
 import { getDocument } from "npm:pdfjs-dist@4.10.38/legacy/build/pdf.mjs";
 
 const cors = {
@@ -110,6 +111,32 @@ function parseText(text: string) {
     text_preview: text.slice(0, 12000)
   };
 }
+function xmlText(value: string) {
+  return value.replace(/<w:tab\\s*\\/>/g, " ").replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&#(\\d+);/g, (_, n) => String.fromCodePoint(Number(n))).replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16))).trim();
+}
+async function extractDocx(bytes: Uint8Array) {
+  const zip = await JSZip.loadAsync(bytes);
+  const entry = zip.file("word/document.xml");
+  if (!entry) throw new Error("В DOCX не найден основной текст документа.");
+  const xml = await entry.async("string");
+  const lines: string[] = [];
+  const tableRows = [...xml.matchAll(/<w:tr\\b[\\s\\S]*?<\\/w:tr>/g)].map(match => {
+    const cells = [...match[0].matchAll(/<w:tc\\b[\\s\\S]*?<\\/w:tc>/g)].map(cell => {
+      const parts = [...cell[0].matchAll(/<w:t(?:\\s[^>]*)?>([\\s\\S]*?)<\\/w:t>/g)].map(x => xmlText(x[1]));
+      return parts.join(" ").trim();
+    });
+    return cells.some(Boolean) ? cells.join(" | ") : "";
+  }).filter(Boolean);
+  if (tableRows.length) lines.push(...tableRows);
+  else {
+    for (const paragraph of xml.matchAll(/<w:p\\b[\\s\\S]*?<\\/w:p>/g)) {
+      const parts = [...paragraph[0].matchAll(/<w:t(?:\\s[^>]*)?>([\\s\\S]*?)<\\/w:t>/g)].map(x => xmlText(x[1]));
+      const line = parts.join(" ").trim();
+      if (line) lines.push(line);
+    }
+  }
+  return lines.join("\\n").slice(0, 50000);
+}
 function decodeText(bytes: Uint8Array) {
   try { return new TextDecoder("utf-8", { fatal: true }).decode(bytes); }
   catch { return new TextDecoder("windows-1251").decode(bytes); }
@@ -117,6 +144,7 @@ function decodeText(bytes: Uint8Array) {
 
 async function extractFile(bytes: Uint8Array, filename: string, mime: string) {
   const ext = filename.toLowerCase().split(".").pop() || "";
+  if (ext === "docx") return await extractDocx(bytes);
   if (ext === "xlsx" || ext === "xls") {
     const workbook = XLSX.read(bytes, { type: "array" });
     const lines: string[] = [];
@@ -159,7 +187,7 @@ async function extractFile(bytes: Uint8Array, filename: string, mime: string) {
   if (["csv", "txt", "eml"].includes(ext)) {
     return decodeText(bytes).replace(/^\uFEFF/, "").slice(0, 50000);
   }
-  throw new Error("Поддерживаются PDF, XLSX, XLS, CSV, TXT и EML.");
+  throw new Error("Поддерживаются PDF, XLSX, XLS, DOCX, CSV, TXT и EML.");
 }
 
 Deno.serve(async (req: Request) => {
@@ -174,7 +202,7 @@ Deno.serve(async (req: Request) => {
     if (!(file instanceof File) || !companyId) return json({ error: "Выберите файл и предприятие." }, 400);
     const filename = file.name.slice(0, 255);
     const ext = filename.toLowerCase().split(".").pop() || "";
-    if (!["pdf", "xlsx", "xls", "csv", "txt", "eml"].includes(ext)) return json({ error: "Формат файла не поддерживается." }, 415);
+    if (!["pdf", "xlsx", "xls", "docx", "csv", "txt", "eml"].includes(ext)) return json({ error: "Формат файла не поддерживается." }, 415);
     if (file.size <= 0 || file.size > 15 * 1024 * 1024) return json({ error: "Размер файла должен быть от 1 байта до 15 МБ." }, 413);
 
     const { data: member, error: memberError } = await db.from("company_members").select("role")
@@ -185,7 +213,7 @@ Deno.serve(async (req: Request) => {
     const bytes = new Uint8Array(await file.arrayBuffer());
     const inferredMime: Record<string,string> = {
       pdf: "application/pdf", xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      xls: "application/vnd.ms-excel", csv: "text/csv", txt: "text/plain", eml: "message/rfc822"
+      xls: "application/vnd.ms-excel", docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", csv: "text/csv", txt: "text/plain", eml: "message/rfc822"
     };
     const mime = file.type && file.type !== "application/octet-stream" ? file.type : (inferredMime[ext] || "application/octet-stream");
     const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, "_");
