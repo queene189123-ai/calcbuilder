@@ -185,6 +185,29 @@ Deno.serve(async (req) => {
       await admin.from("supplier_email_messages").update({processing_status:"parsed"}).eq("company_id",companyId).eq("gmail_message_id",messageId);
       return json({ok:true,quoteId:quote.id});
     }
+    if (body.action === "link_message") {
+      const companyId=String(body.companyId||"");
+      const messageId=String(body.messageId||"");
+      const supplierId=String(body.supplierId||"")||null;
+      const requestId=String(body.requestId||"")||null;
+      if(!(await canManagePurchasing(companyId,user.id)))return json({error:"Для сопоставления нужны права владельца, администратора или закупщика."},403);
+      const {data:message,error:messageError}=await admin.from("supplier_email_messages").select("id,from_email").eq("company_id",companyId).eq("gmail_message_id",messageId).maybeSingle();
+      if(messageError)throw messageError;
+      if(!message)return json({error:"Письмо не найдено."},404);
+      if(supplierId){
+        const {data:supplier,error}=await admin.from("suppliers").select("id,email").eq("company_id",companyId).eq("id",supplierId).maybeSingle();
+        if(error)throw error;
+        if(!supplier)return json({error:"Поставщик не найден в этом предприятии."},400);
+      }
+      if(requestId){
+        const {data:request,error}=await admin.from("purchase_requests").select("id").eq("company_id",companyId).eq("id",requestId).maybeSingle();
+        if(error)throw error;
+        if(!request)return json({error:"Заявка не найдена в этом предприятии."},400);
+      }
+      const {error:updateError}=await admin.from("supplier_email_messages").update({supplier_id:supplierId,request_id:requestId,processing_status:"needs_review"}).eq("company_id",companyId).eq("id",message.id);
+      if(updateError)throw updateError;
+      return json({ok:true});
+    }
     if (body.action === "saved_inbox") {
       const companyId = String(body.companyId || "");
       const { data: member, error: memberError } = await admin.from("company_members")
@@ -235,7 +258,9 @@ Deno.serve(async (req) => {
         supplierName: (supplierById.get(m.supplier_id) || (supplierResult.data || []).find((s: any) => String(s.email || "").trim().toLowerCase() === String(m.from_email || "").trim().toLowerCase()))?.name || null,
         requestId: m.request_id || null,
         requestTitle: requestById.get(m.request_id)?.title || null,
-        requestItems: itemsByRequest.get(m.request_id) || []
+        requestItems: itemsByRequest.get(m.request_id) || [],
+        supplierOptions: (supplierResult.data || []).map((s:any)=>({id:s.id,name:s.name,email:s.email||""})),
+        requestOptions: (requestResult.data || []).map((r:any)=>({id:r.id,title:r.title||"Закупка"}))
       }));
       return json({ messages, synced: messages.length, source: "database", monitor: monitorResult.data || null });
     }
