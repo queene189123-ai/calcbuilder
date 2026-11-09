@@ -1,0 +1,10 @@
+project_id = "tdewylpxanviyhdwdnci"
+
+[functions.gmail-integration]
+verify_jwt = false
+
+[functions.gmail-monitor]
+verify_jwt = false
+
+[functions.gmail-attachment-reader-v2]
+verify_jwt = false
