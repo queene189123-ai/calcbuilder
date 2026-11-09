@@ -268,7 +268,7 @@ Deno.serve(async (req) => {
         const fromEmail = (from.match(/<([^>]+)>/)?.[1] || from).trim().toLowerCase();
         if (!fromEmail || fromEmail === String(c.gmail_address || "").trim().toLowerCase()) return null;
         const subject = metaHeader("Subject");
-        const subjectToken = subject.match(/\\[(SP-[A-Z0-9-]+)\\]/i)?.[1] || null;
+        const subjectToken = subject.match(/\[(SP-[A-Z0-9-]+)\]/i)?.[1] || null;
         const requestLink = subjectToken ? (links || []).find((x:any)=>String(x.subject_token).toLowerCase()===subjectToken.toLowerCase()&&String(x.supplier_email).toLowerCase()===fromEmail) : null;
         const supplier = supplierByEmail.get(fromEmail) || null;
         if (!requestLink && !supplier) return null;
