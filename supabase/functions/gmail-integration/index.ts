@@ -247,29 +247,36 @@ Deno.serve(async (req) => {
       if (!list.ok) return json({ error: messages.error?.message || "Не удалось прочитать входящие." }, 502);
       const { data: suppliers, error: suppliersError } = await admin.from("suppliers").select("id,name,email").eq("company_id", companyId);
       if (suppliersError) throw suppliersError;
+      const { data: links, error: linksError } = await admin.from("purchase_request_suppliers")
+        .select("request_id,supplier_id,supplier_email,subject_token").eq("company_id", companyId);
+      if (linksError) throw linksError;
       const supplierByEmail = new Map((suppliers || []).filter((s: any) => s.email).map((s: any) => [String(s.email).trim().toLowerCase(), s]));
       const items = await Promise.all((messages.messages || []).slice(0, 30).map(async (m: {id:string}) => {
+        const metaResponse = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/" + m.id + "?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date", { headers: { Authorization: "Bearer " + token } });
+        const meta = await metaResponse.json();
+        if (!metaResponse.ok) return null;
+        const metaHeaders = meta.payload?.headers || [];
+        const metaHeader = (name: string) => metaHeaders.find((x:any)=>String(x.name).toLowerCase()===name.toLowerCase())?.value || "";
+        const from = metaHeader("From");
+        const fromEmail = (from.match(/<([^>]+)>/)?.[1] || from).trim().toLowerCase();
+        if (!fromEmail || fromEmail === String(c.gmail_address || "").trim().toLowerCase()) return null;
+        const subject = metaHeader("Subject");
+        const subjectToken = subject.match(/\\[(SP-[A-Z0-9-]+)\\]/i)?.[1] || null;
+        const requestLink = subjectToken ? (links || []).find((x:any)=>String(x.subject_token).toLowerCase()===subjectToken.toLowerCase()&&String(x.supplier_email).toLowerCase()===fromEmail) : null;
+        const supplier = supplierByEmail.get(fromEmail) || null;
+        if (!requestLink && !supplier) return null;
+
         const r = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/" + m.id + "?format=full", { headers: { Authorization: "Bearer " + token } });
         const d = await r.json();
         if (!r.ok) return null;
         const headers = d.payload?.headers || [];
         const header = (name: string) => headers.find((x:any)=>String(x.name).toLowerCase()===name.toLowerCase())?.value || "";
-        const from = header("From");
-        const fromEmail = (from.match(/<([^>]+)>/)?.[1] || from).trim().toLowerCase();
-        const supplier = supplierByEmail.get(fromEmail) || null;
-        const subject = header("Subject");
-        const subjectToken = subject.match(/\[(SP-[A-Z0-9-]+)\]/i)?.[1] || null;
-        let requestLink: any = null;
-        if (subjectToken) {
-          const { data: link } = await admin.from("purchase_request_suppliers").select("request_id,supplier_id,supplier_email").eq("company_id", companyId).eq("subject_token", subjectToken).maybeSingle();
-          if (link && String(link.supplier_email).toLowerCase() === fromEmail) requestLink = link;
-        }
         const texts: string[] = [], attachments: any[] = [];
         collectMessageParts(d.payload, texts, attachments);
-        const bodyText = texts.join("\n\n").slice(0, 30000) || d.snippet || "";
+        const bodyText = texts.join("\\n\\n").slice(0, 30000) || d.snippet || "";
         const extracted = parseSupplierReply(bodyText);
         const receivedAt = d.internalDate ? new Date(Number(d.internalDate)).toISOString() : null;
-        const row = {company_id:companyId,gmail_message_id:m.id,supplier_id:requestLink?.supplier_id||supplier?.id||null,request_id:requestLink?.request_id||null,from_email:fromEmail,subject,body_text:bodyText,attachments,extracted_data:extracted,processing_status:requestLink?"needs_review":supplier?"needs_review":"received",received_at:receivedAt};
+        const row = {company_id:companyId,gmail_message_id:m.id,supplier_id:requestLink?.supplier_id||supplier?.id||null,request_id:requestLink?.request_id||null,from_email:fromEmail,subject,body_text:bodyText,attachments,extracted_data:extracted,processing_status:"needs_review",received_at:receivedAt};
         const {data:existingMessage,error:findMessageError}=await admin.from("supplier_email_messages").select("id").eq("company_id",companyId).eq("gmail_message_id",m.id).maybeSingle();
         if(findMessageError) throw findMessageError;
         const saveResult=existingMessage
