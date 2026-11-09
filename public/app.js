@@ -545,7 +545,7 @@ async function openDocumentReview(documentId){
    const selectedItemId=selectedItem?.id||'';
    const matches=materialMatch(description,specification);
    const linkedMaterial=selectedItem?.material_id||((matches[0]?.score||0)>=0.72?matches[0].material.id:'');
-   return '<div class="dr-quote-row" data-quote-row data-material-id="'+eh(linkedMaterial)+'" style="border:1px solid var(--line,#ddd);border-radius:10px;padding:12px;margin:10px 0">'+
+   return '<div class="dr-quote-row" data-quote-row data-material-id="'+eh(linkedMaterial)+'" data-quoted-total="'+eh(parsed?.total||'')+'" style="border:1px solid var(--line,#ddd);border-radius:10px;padding:12px;margin:10px 0">'+
     '<div class="field full"><label>Связать с позицией существующей закупки (необязательно)</label><select data-row-item><option value="">Без привязки — создать позицию из строки КП</option>'+itemOptions(rowItems,selectedItemId)+'</select></div>'+
     '<div class="field full"><label>Материал из справочника предприятия</label><select data-row-material>'+catalogOptions(matches,linkedMaterial)+'</select><div class="muted" data-match-hint style="font-size:12px;margin-top:4px">'+(matches.length?'Предложены совпадения по названию и характеристикам. Проверьте перед сохранением.':'Совпадение не найдено — позицию можно добавить без привязки.')+'</div></div>'+
     '<div class="formgrid"><div class="field full"><label>Материал / наименование позиции</label><input data-row-description value="'+eh(description)+'" placeholder="Например, Ст3сп лист 1500×6000"></div>'+
@@ -553,6 +553,7 @@ async function openDocumentReview(documentId){
     '<div class="field"><label>Количество</label><input data-row-quantity type="number" min="0.0001" step="0.0001" value="'+eh(parsed?.quantity??item?.quantity??'')+'" placeholder="20"></div>'+
     '<div class="field"><label>Единица</label><input data-row-unit value="'+eh(parsed?.unit||item?.unit||'лист')+'" placeholder="лист, кг, м, шт."></div>'+
     '<div class="field"><label>Цена за единицу</label><input data-row-price type="number" min="0.0001" step="0.01" value="'+eh(priceValue)+'" placeholder="Введите цену"></div>'+
+    '<div class="field full"><div data-price-check class="muted" style="font-size:12px">Проверка суммы и количества появится после сопоставления.</div></div>'+
     '<div class="field"><label>Срок, дней</label><input data-row-lead type="number" min="0" value="'+eh(ex.lead_time_days||'')+'"></div>'+
     '<div class="field full"><label>Наличие / комментарий</label><input data-row-availability value="'+eh(ex.availability||'')+'" placeholder="Например, в наличии"></div></div>'+
     '<button class="btn" type="button" data-remove-quote-row>Удалить позицию</button></div>';
@@ -581,6 +582,26 @@ async function openDocumentReview(documentId){
   });
  };
  $('drRequest').addEventListener('change',refreshRowOptions);
+ const refreshPriceChecks=()=>{
+  rowsEl.querySelectorAll('[data-quote-row]').forEach(row=>{
+   const quantity=Number(row.querySelector('[data-row-quantity]').value||0);
+   const price=Number(row.querySelector('[data-row-price]').value||0);
+   const quotedTotal=Number(row.dataset.quotedTotal||0);
+   const selectedId=row.querySelector('[data-row-item]').value;
+   const linked=items.find(x=>x.id===selectedId);
+   const messages=[];
+   if(quotedTotal>0&&quantity>0&&price>0){
+    const calculated=quantity*price,diff=Math.abs(calculated-quotedTotal)/Math.max(calculated,quotedTotal);
+    if(diff>0.02)messages.push('Сумма в документе '+quotedTotal.toLocaleString('ru-RU')+' не совпадает с количеством × ценой ('+calculated.toLocaleString('ru-RU')+'). Проверьте цену и количество.');
+    else messages.push('Сумма проверена: '+quotedTotal.toLocaleString('ru-RU'));
+   }else if(quotedTotal>0)messages.push('Сумма в документе: '+quotedTotal.toLocaleString('ru-RU')+'. Заполните количество и цену для проверки.');
+   if(linked&&quantity>0&&Number(linked.quantity)>0&&Math.abs(quantity-Number(linked.quantity))>0.0001){
+    messages.push('В закупке запрошено '+linked.quantity+' '+(linked.unit||'')+', в КП указано '+quantity+' '+(row.querySelector('[data-row-unit]').value||'')+'.');
+   }
+   const hint=row.querySelector('[data-price-check]');
+   if(hint){hint.textContent=messages.join(' ' )||'Сумма и количество: явных расхождений не выявлено.';hint.style.color=messages.some(x=>x.includes('не совпадает')||x.includes('запрошено'))?'var(--danger,#b45309)':'';}
+  });
+ };
  const refreshMaterialSuggestions=row=>{
   const matches=materialMatch(row.querySelector('[data-row-description]').value,row.querySelector('[data-row-spec]').value);
   const current=row.dataset.materialId||'';
@@ -591,6 +612,7 @@ async function openDocumentReview(documentId){
  };
  rowsEl.addEventListener('input',e=>{
   if(e.target.matches('[data-row-description],[data-row-spec]'))refreshMaterialSuggestions(e.target.closest('[data-quote-row]'));
+  if(e.target.matches('[data-row-quantity],[data-row-price]'))refreshPriceChecks();
  });
  rowsEl.addEventListener('change',e=>{
   const materialSelect=e.target.closest('[data-row-material]');
@@ -602,16 +624,17 @@ async function openDocumentReview(documentId){
    }
    return;
   }
-  const sel=e.target.closest('[data-row-item]');if(!sel)return;
+  const sel=e.target.closest('[data-row-item]');if(!sel){if(e.target.matches('[data-row-quantity],[data-row-price]'))refreshPriceChecks();return;}
   const row=sel.closest('[data-quote-row]');
   if(!sel.value){row.dataset.materialId='';refreshMaterialSuggestions(row);return;}
   const item=items.find(x=>x.id===sel.value);if(!item)return;
   row.dataset.materialId=item.material_id||'';
-  refreshMaterialSuggestions(row);
+  refreshMaterialSuggestions(row);refreshPriceChecks();
  });
+ refreshPriceChecks();
  $('drAddRow').addEventListener('click',()=>{
   const wrap=document.createElement('div');wrap.innerHTML=makeRow(rowsEl.children.length,'','');
-  rowsEl.appendChild(wrap.firstElementChild);refreshRowOptions();
+  rowsEl.appendChild(wrap.firstElementChild);refreshRowOptions();refreshPriceChecks();
  });
  rowsEl.addEventListener('click',e=>{
   const btn=e.target.closest('[data-remove-quote-row]');if(!btn)return;
