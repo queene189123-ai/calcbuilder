@@ -474,17 +474,28 @@ async function openDocumentReview(documentId){
  const itemOptions=(list,selected='')=>list.map(x=>'<option value="'+eh(x.id)+'" '+(x.id===selected?'selected':'')+'>'+eh(x.description)+' · '+eh(x.quantity)+' '+eh(x.unit)+'</option>').join('');
  const normalizeMatchText=value=>String(value||'').toLowerCase().replace(/ё/g,'е').replace(/[×х]/g,'x').replace(/[^a-zа-я0-9.]+/g,' ').trim().split(/\s+/).filter(token=>token.length>1);
  const materialMatch=(description,specification='')=>{
-  const source=normalizeMatchText(description+' '+specification);
+  const sourceText=String(description+' '+specification).toLowerCase().replace(/ё/g,'е');
+  const source=normalizeMatchText(sourceText);
   if(!source.length)return [];
   const sourceSet=new Set(source);
+  const gradeOf=value=>(String(value||'').toLowerCase().replace(/ё/g,'е').match(/\b(?:aisi\s*)?\d{3,5}[a-z]?\b|\bст\s*\d+[а-яa-z0-9]*\b|\b\d{2}х\d{2,3}н\d{1,2}\b/i)||[])[0]?.replace(/\s+/g,'')||'';
+  const thicknessOf=value=>{
+   const v=String(value||'').toLowerCase().replace(/,/g,'.');
+   const m=v.match(/толщин[а-я]*\s*[:=]?\s*(\d+(?:\.\d+)?)|\bлист\b[^\n]{0,45}?(\d+(?:\.\d+)?)\s*мм/i);
+   return m?Number(m[1]||m[2]):null;
+  };
+  const sourceGrade=gradeOf(sourceText),sourceThickness=thicknessOf(sourceText);
   return catalogMaterials.map(material=>{
-   const target=normalizeMatchText([material.name,material.category,material.specification?.text||'',material.specification?.brand||'',material.specification?.grade||''].join(' '));
-   const targetSet=new Set(target);
+   const targetText=[material.name,material.category,material.specification?.text||'',material.specification?.brand||'',material.specification?.grade||''].join(' ').toLowerCase().replace(/ё/g,'е');
+   const target=normalizeMatchText(targetText),targetSet=new Set(target);
    const common=[...sourceSet].filter(token=>targetSet.has(token)).length;
    const dice=2*common/Math.max(1,sourceSet.size+targetSet.size);
+   const targetGrade=gradeOf(targetText),targetThickness=thicknessOf(targetText);
+   const gradeConflict=!!(sourceGrade&&targetGrade&&sourceGrade!==targetGrade);
+   const thicknessConflict=sourceThickness!==null&&targetThickness!==null&&Math.abs(sourceThickness-targetThickness)>0.01;
    const contains=String(material.name||'').toLowerCase().includes(String(description||'').toLowerCase().trim())&&String(description||'').trim().length>3;
-   const score=Math.min(1,dice+(contains?0.25:0));
-   return {material,score};
+   const score=gradeConflict||thicknessConflict?0:Math.min(1,dice+(contains?0.25:0));
+   return {material,score,gradeConflict,thicknessConflict};
   }).filter(x=>x.score>0.12).sort((a,b)=>b.score-a.score).slice(0,5);
  };
  const catalogOptions=(matches,selected='')=>'<option value="">Не сопоставлять со справочником</option>'+matches.map(x=>'<option value="'+eh(x.material.id)+'" '+(x.material.id===selected?'selected':'')+'>'+eh(x.material.name)+' · '+Math.round(x.score*100)+'%</option>').join('');
