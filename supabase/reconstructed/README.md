@@ -30,7 +30,8 @@ Baseline не является восстановлением оригиналь
    ```
    Это нужно, потому что baseline содержит конечное состояние этих изменений. Не запускать эти миграции повторно поверх baseline.
 6. Развернуть Edge Functions и настроить их секреты/redirect URLs для нового проекта отдельно. Проверить OAuth consent screen и Google OAuth credentials — они не переносятся из SQL.
-7. Выполнить read-only проверку схемы: `psql \"$NEW_SUPABASE_DB_URL\" -v ON_ERROR_STOP=1 -f supabase/reconstructed/verify_baseline.sql`. Скрипт сверяет количество объектов, RLS, RPC-права и настройки bucket; он не изменяет данные.\n8. Проверить cron job, Edge Functions, OAuth secrets и Storage policies в новом проекте. Сверить с `supabase/RECOVERY.md`.
+7. Выполнить read-only проверку схемы: `psql "$NEW_SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/reconstructed/verify_baseline.sql`. Скрипт сверяет таблицы, столбцы, ограничения, индексы, политики, RLS, RPC-права и bucket; он не изменяет данные.
+8. Проверить cron job, Edge Functions, OAuth secrets и Storage policies в новом проекте. Сверить с `supabase/RECOVERY.md`.
 
 ## Важные ограничения
 
