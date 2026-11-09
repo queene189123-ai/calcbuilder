@@ -65,7 +65,7 @@ async function syncWorkspace(){
    const batchDrafts=emailDrafts.filter(d=>d.batchId===p.draftBatch);
    for(const d of batchDrafts){
     const supplier=suppliers.find(s=>s.id===d.supplierLocalId);
-    const link={company_id:company.id,request_id:p.dbId,supplier_id:supplier?.dbId||null,supplier_email:d.to,subject_token:d.subjectToken,status:d.status==='Отправлено'?'sent':'draft',email_subject:d.subject||null,email_body:d.body||null,drafted_at:d.createdAt||new Date().toISOString()};
+    const link={company_id:company.id,request_id:p.dbId,supplier_id:supplier?.dbId||null,supplier_email:d.to,subject_token:d.subjectToken,status:d.status==='Получен ответ'?'replied':d.status==='Отправлено'?'sent':'draft',email_subject:d.subject||null,email_body:d.body||null,drafted_at:d.createdAt||new Date().toISOString(),replied_at:d.status==='Получен ответ'?(d.repliedAt||new Date().toISOString()):null};
     const {error:linkError}=await client.from('purchase_request_suppliers').upsert(link,{onConflict:'company_id,subject_token'});
     if(linkError)throw linkError;
     d.requestId=p.dbId;
@@ -180,10 +180,10 @@ function showPurchase(id){
  const drafts=emailDrafts.filter(d=>p.dbId?(d.requestId===p.dbId||d.batchId===p.dbId):(d.batchId===p.draftBatch));
  const offers=quoteOffers.filter(q=>p.name&&String(q.material||'').includes(p.name));
  const itemRows=(p.requestItems||[]).map(x=>'<tr><td>'+eh(x.name)+'</td><td>'+eh(x.spec||'—')+'</td><td>'+eh(x.qty)+'</td><td>'+eh(x.unit)+'</td></tr>').join('');
- const draftRows=drafts.map(d=>'<tr><td>'+eh(d.supplier||d.to)+'</td><td>'+eh(d.to)+'</td><td><span class="pill '+(d.status==='Отправлено'?'green':'orange')+'">'+eh(d.status||'Черновик')+'</span></td></tr>').join('');
+ const draftRows=drafts.map(d=>'<tr><td>'+eh(d.supplier||d.to)+'</td><td>'+eh(d.to)+'</td><td><span class="pill '+(['Отправлено','Получен ответ'].includes(d.status)?'green':'orange')+'">'+eh(d.status||'Черновик')+'</span></td></tr>').join('');
  const quoteRows=offers.map(q=>'<tr><td>'+eh(q.supplier)+'</td><td>'+money(q.unitPrice,q.currency)+' / '+eh(q.unit)+'</td><td>'+eh(q.qty)+' '+eh(q.unit)+'</td><td>'+money(q.delivery,q.currency)+'</td><td class="strong">'+money(q.qty*q.unitPrice+q.delivery,q.currency)+'</td></tr>').join('');
  const body='<div class="notice '+(p.dbId?'':'warn')+'">'+(p.dbId?'Рабочая закупка · данные загружены из базы предприятия.':'Демонстрационная закупка. Для реальной работы войдите в аккаунт и выберите предприятие.')+'</div>'+
- '<div class="cards" style="grid-template-columns:repeat(3,1fr)"><div class="stat"><div class="statline">Поставщики</div><strong>'+Number(p.vendors||drafts.length||0)+'</strong></div><div class="stat"><div class="statline">Отправлено</div><strong>'+Number(p.replies||drafts.filter(d=>d.status==='Отправлено').length||0)+'</strong></div><div class="stat"><div class="statline">Статус</div><strong style="font-size:13px">'+eh(p.status)+'</strong></div></div>'+
+ '<div class="cards" style="grid-template-columns:repeat(4,1fr)"><div class="stat"><div class="statline">Поставщики</div><strong>'+Number(p.vendors||drafts.length||0)+'</strong></div><div class="stat"><div class="statline">Отправлено</div><strong>'+Number(p.sent??drafts.filter(d=>['Отправлено','Получен ответ'].includes(d.status)).length)+'</strong></div><div class="stat"><div class="statline">Получено ответов</div><strong>'+Number(p.replies??drafts.filter(d=>d.status==='Получен ответ').length)+'</strong></div><div class="stat"><div class="statline">Статус</div><strong style="font-size:13px">'+eh(p.status)+'</strong></div></div>'+
  '<div class="panel"><div class="panelhead"><h3>Позиции закупки</h3></div><div class="tablewrap"><table><thead><tr><th>Материал</th><th>Характеристики</th><th>Количество</th><th>Ед.</th></tr></thead><tbody>'+(itemRows||'<tr><td colspan="4" class="empty">'+eh(p.items||'Позиции не указаны')+'</td></tr>')+'</tbody></table></div></div>'+
  '<div class="panel" style="margin-top:12px"><div class="panelhead"><h3>Запросы поставщикам</h3><span class="pill">'+drafts.length+' писем</span></div><div class="tablewrap"><table><thead><tr><th>Поставщик</th><th>Email</th><th>Статус</th></tr></thead><tbody>'+(draftRows||'<tr><td colspan="3" class="empty">Черновики запросов не найдены</td></tr>')+'</tbody></table></div></div>'+
  '<div class="panel" style="margin-top:12px"><div class="panelhead"><h3>Полученные коммерческие предложения</h3><span class="pill">'+offers.length+' позиций КП</span></div><div class="tablewrap"><table><thead><tr><th>Поставщик</th><th>Цена</th><th>Количество</th><th>Доставка</th><th>Итого</th></tr></thead><tbody>'+(quoteRows||'<tr><td colspan="5" class="empty">КП по этой закупке пока не получены</td></tr>')+'</tbody></table></div></div>'+
@@ -238,13 +238,24 @@ function normalizeDrafts(list){
 }
 emailDrafts=normalizeDrafts(emailDrafts);
 localStorage.setItem('sp_email_drafts',JSON.stringify(emailDrafts));
+window.snabproMarkReplyReceived=(requestId,email)=>{
+ const target=String(email||'').trim().toLowerCase();
+ const d=emailDrafts.find(x=>(x.requestId||x.batchId)===requestId&&String(x.to||'').trim().toLowerCase()===target);
+ if(!d)return;
+ d.status='Получен ответ';d.repliedAt=new Date().toISOString();
+ const batch=emailDrafts.filter(x=>(x.requestId||x.batchId)===requestId||x.batchId===requestId);
+ const p=purchases.find(x=>x.dbId===requestId||x.draftBatch===requestId);
+ if(p){p.vendors=batch.length;p.sent=batch.filter(x=>['Отправлено','Получен ответ'].includes(x.status)).length;p.replies=batch.filter(x=>x.status==='Получен ответ').length;p.status=p.replies===p.vendors?'Получены ответы':'Есть ответы';}
+ localStorage.setItem('sp_email_drafts',JSON.stringify(emailDrafts));
+ if(p){save();renderPurchases();renderDashboard();}
+};
 window.snabproMarkDraftSent=draftId=>{
  const d=emailDrafts.find(x=>x.id===draftId);if(!d)return;
  d.status='Отправлено';
  const requestId=d.requestId||d.batchId;
  const batch=emailDrafts.filter(x=>(x.requestId||x.batchId)===requestId||x.batchId===requestId);
  const p=purchases.find(x=>x.dbId===requestId||x.draftBatch===requestId);
- if(p){p.vendors=batch.length;p.replies=batch.filter(x=>x.status==='Отправлено').length;p.status=p.replies===p.vendors?'Ожидаем ответы':'Частично отправлено';}
+ if(p){p.vendors=batch.length;p.sent=batch.filter(x=>['Отправлено','Получен ответ'].includes(x.status)).length;p.replies=batch.filter(x=>x.status==='Получен ответ').length;p.status=p.replies===p.vendors?'Получены ответы':p.replies?'Есть ответы':p.sent===p.vendors?'Ожидаем ответы':'Черновики готовы';}
  localStorage.setItem('sp_email_drafts',JSON.stringify(emailDrafts));
  if(p){save();renderPurchases();renderDashboard();}
 };
@@ -585,7 +596,7 @@ window.snabproLoadWorkspace=async function(company){
    client.from('suppliers').select('*').eq('company_id',company.id).order('created_at',{ascending:true}),
    client.from('purchase_requests').select('*').eq('company_id',company.id).order('created_at',{ascending:false}),
    client.from('quote_documents').select('id,original_filename,extraction_status,created_at').eq('company_id',company.id).order('created_at',{ascending:false}),
-   client.from('purchase_request_suppliers').select('request_id,status,supplier_id,supplier_email,subject_token,gmail_message_id,sent_at,email_subject,email_body,drafted_at').eq('company_id',company.id).order('drafted_at',{ascending:true}),
+   client.from('purchase_request_suppliers').select('request_id,status,supplier_id,supplier_email,subject_token,gmail_message_id,sent_at,replied_at,email_subject,email_body,drafted_at').eq('company_id',company.id).order('drafted_at',{ascending:true}),
    client.from('material_folders').select('id,name,sort_order').eq('company_id',company.id).order('sort_order').order('name'),
    client.from('purchase_request_items').select('id,request_id,material_id,description,specification,quantity,unit').eq('company_id',company.id).order('created_at',{ascending:true})
   ]);
@@ -601,13 +612,14 @@ window.snabproLoadWorkspace=async function(company){
   suppliers=(s.data||[]).map((x,i)=>({id:i+1,dbId:x.id,name:x.name,email:x.email||'',contact:x.contact||x.phone||'',region:x.region||'',cats:x.categories||[],rating:x.rating||'—',lead:x.lead_time||'Не указан'}));
   purchases=(p.data||[]).map((x,i)=>{
    const linked=linkStatuses.get(x.id)||[],requestItems=(itemsByRequest.get(x.id)||[]).map((item,j)=>({id:materials.find(m=>m.dbId===item.material_id)?.id||null,dbId:item.id,materialDbId:item.material_id,name:item.description,spec:item.specification?.text||'',qty:Number(item.quantity),unit:item.unit,cat:item.specification?.category||''}));
-   return {id:i+1,dbId:x.id,name:x.title,items:x.details?.items||requestItems.map(v=>v.name+' · '+v.qty+' '+v.unit).join('; '),vendors:linked.length||x.details?.vendors||0,replies:linked.filter(v=>v==='sent').length||x.details?.replies||0,status:x.status==='completed'?'Завершена':x.status==='cancelled'?'Отменена':(linked.length&&linked.every(v=>v==='sent')?'Ожидаем ответы':linked.length?'Черновики готовы':'Черновик'),date:x.details?.date||new Date(x.created_at).toLocaleDateString('ru-RU'),requestItems,draftBatch:x.id};
+   const replies=linked.filter(v=>v==='replied').length,sent=linked.filter(v=>v==='sent'||v==='replied').length;
+   return {id:i+1,dbId:x.id,name:x.title,items:x.details?.items||requestItems.map(v=>v.name+' · '+v.qty+' '+v.unit).join('; '),vendors:linked.length||x.details?.vendors||0,sent,replies,status:x.status==='completed'?'Завершена':x.status==='cancelled'?'Отменена':(linked.length&&replies===linked.length?'Получены ответы':replies?'Есть ответы':linked.length&&sent===linked.length?'Ожидаем ответы':linked.length?'Черновики готовы':'Черновик'),date:x.details?.date||new Date(x.created_at).toLocaleDateString('ru-RU'),requestItems,draftBatch:x.id};
   });
   emailDrafts=(links.data||[]).map(link=>{
    const supplier=(s.data||[]).find(v=>v.id===link.supplier_id),requestItems=itemsByRequest.get(link.request_id)||[];
    const items=requestItems.map(item=>({id:item.id,dbId:item.id,name:item.description,spec:item.specification?.text||'',qty:Number(item.quantity),unit:item.unit}));
    const fallbackBody='Добрый день!\n\nПросим подготовить коммерческое предложение на следующие позиции:\n\n'+items.map(item=>'• '+item.name+' — '+item.spec+'; количество: '+item.qty+' '+item.unit).join('\\n')+'\\n\\nПросим указать цену, наличие, срок поставки, стоимость доставки, НДС и условия оплаты.';
-   return {id:link.subject_token,batchId:link.request_id,requestId:link.request_id,supplierLocalId:supplier?suppliers.find(v=>v.dbId===supplier.id)?.id:null,supplier:supplier?.name||link.supplier_email,to:link.supplier_email,subjectToken:link.subject_token,subject:link.email_subject||('Запрос коммерческого предложения ['+link.subject_token+']'),body:link.email_body||fallbackBody,items,createdAt:link.drafted_at,status:link.status==='sent'?'Отправлено':'Черновик'};
+   return {id:link.subject_token,batchId:link.request_id,requestId:link.request_id,supplierLocalId:supplier?suppliers.find(v=>v.dbId===supplier.id)?.id:null,supplier:supplier?.name||link.supplier_email,to:link.supplier_email,subjectToken:link.subject_token,subject:link.email_subject||('Запрос коммерческого предложения ['+link.subject_token+']'),body:link.email_body||fallbackBody,items,createdAt:link.drafted_at,status:link.status==='replied'?'Получен ответ':link.status==='sent'?'Отправлено':'Черновик'};
   });
   localStorage.setItem('sp_email_drafts',JSON.stringify(emailDrafts));
   materials.forEach(m=>m.sup=suppliers.filter(v=>v.cats.includes(m.cat)).length);
