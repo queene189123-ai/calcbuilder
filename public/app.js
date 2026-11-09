@@ -242,7 +242,7 @@ window.snabproMarkReplyReceived=(requestId,email)=>{
  const target=String(email||'').trim().toLowerCase();
  const d=emailDrafts.find(x=>(x.requestId||x.batchId)===requestId&&String(x.to||'').trim().toLowerCase()===target);
  if(!d)return;
- d.status='Получен ответ';d.repliedAt=new Date().toISOString();
+ d.status='Получен ответ';d.repliedAt=d.repliedAt||new Date().toISOString();
  const batch=emailDrafts.filter(x=>(x.requestId||x.batchId)===requestId||x.batchId===requestId);
  const p=purchases.find(x=>x.dbId===requestId||x.draftBatch===requestId);
  if(p){p.vendors=batch.length;p.sent=batch.filter(x=>['Отправлено','Получен ответ'].includes(x.status)).length;p.replies=batch.filter(x=>x.status==='Получен ответ').length;p.status=p.replies===p.vendors?'Получены ответы':'Есть ответы';}
@@ -619,7 +619,7 @@ window.snabproLoadWorkspace=async function(company){
    const supplier=(s.data||[]).find(v=>v.id===link.supplier_id),requestItems=itemsByRequest.get(link.request_id)||[];
    const items=requestItems.map(item=>({id:item.id,dbId:item.id,name:item.description,spec:item.specification?.text||'',qty:Number(item.quantity),unit:item.unit}));
    const fallbackBody='Добрый день!\n\nПросим подготовить коммерческое предложение на следующие позиции:\n\n'+items.map(item=>'• '+item.name+' — '+item.spec+'; количество: '+item.qty+' '+item.unit).join('\\n')+'\\n\\nПросим указать цену, наличие, срок поставки, стоимость доставки, НДС и условия оплаты.';
-   return {id:link.subject_token,batchId:link.request_id,requestId:link.request_id,supplierLocalId:supplier?suppliers.find(v=>v.dbId===supplier.id)?.id:null,supplier:supplier?.name||link.supplier_email,to:link.supplier_email,subjectToken:link.subject_token,subject:link.email_subject||('Запрос коммерческого предложения ['+link.subject_token+']'),body:link.email_body||fallbackBody,items,createdAt:link.drafted_at,status:link.status==='replied'?'Получен ответ':link.status==='sent'?'Отправлено':'Черновик'};
+   return {id:link.subject_token,batchId:link.request_id,requestId:link.request_id,supplierLocalId:supplier?suppliers.find(v=>v.dbId===supplier.id)?.id:null,supplier:supplier?.name||link.supplier_email,to:link.supplier_email,subjectToken:link.subject_token,subject:link.email_subject||('Запрос коммерческого предложения ['+link.subject_token+']'),body:link.email_body||fallbackBody,items,createdAt:link.drafted_at,repliedAt:link.replied_at||null,status:link.status==='replied'?'Получен ответ':link.status==='sent'?'Отправлено':'Черновик'};
   });
   localStorage.setItem('sp_email_drafts',JSON.stringify(emailDrafts));
   materials.forEach(m=>m.sup=suppliers.filter(v=>v.cats.includes(m.cat)).length);
