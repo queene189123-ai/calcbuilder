@@ -11,3 +11,9 @@ verify_jwt = false
 
 [functions.quote-document-parser]
 verify_jwt = true
+
+[functions.gmail-attachment-reader]
+verify_jwt = true
+
+[functions.gmail-attachment-parser]
+verify_jwt = true
