@@ -251,9 +251,13 @@ Deno.serve(async (req) => {
         .select("request_id,supplier_id,supplier_email,subject_token").eq("company_id", companyId);
       if (linksError) throw linksError;
       const messageIds=(messages.messages||[]).slice(0,30).map((m:any)=>String(m.id)).filter(Boolean);
-      const {data:seenRows,error:seenQueryError}=await admin.from("gmail_monitor_seen_messages").select("gmail_message_id").eq("company_id",companyId).in("gmail_message_id",messageIds);
-      if(seenQueryError)throw seenQueryError;
-      const seenSet=new Set((seenRows||[]).map((x:any)=>x.gmail_message_id));
+      let seenRows:any[]=[];
+      if(messageIds.length){
+        const {data,error}=await admin.from("gmail_monitor_seen_messages").select("gmail_message_id").eq("company_id",companyId).in("gmail_message_id",messageIds);
+        if(error)throw error;
+        seenRows=data||[];
+      }
+      const seenSet=new Set(seenRows.map((x:any)=>x.gmail_message_id));
       const freshMessages=(messages.messages||[]).slice(0,30).filter((m:any)=>!seenSet.has(String(m.id)));
       const supplierByEmail = new Map((suppliers || []).filter((s: any) => s.email).map((s: any) => [String(s.email).trim().toLowerCase(), s]));
       const items = await Promise.all(freshMessages.map(async (m: {id:string}) => {
