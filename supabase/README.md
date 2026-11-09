@@ -9,7 +9,7 @@
 ## Security notes
 
 - The Gmail connection, OAuth state, incoming-message, and monitor tables have explicit deny-all policies for `anon` and `authenticated`; server-side Edge Functions access them with the service role only after membership checks.
-- `create_manual_quote` is a `SECURITY DEFINER` transaction function. It checks `auth.uid()` and permits only `owner`, `admin`, or `buyer` members before writing any records.
+- `create_company_for_current_user` and `create_manual_quote` are intentionally callable by authenticated users as `SECURITY DEFINER` functions: both use an empty `search_path`; the first requires `auth.uid()` and creates a company only for that user, while the second requires `auth.uid()` plus an `owner`/`admin`/`buyer` membership check before writing. Supabase's linter flags the `SECURITY DEFINER` execution surface; these RPCs are required by the current onboarding and manual-quote UI and must not be exposed to `anon`.
 - Supabase Auth's leaked-password protection is currently disabled in project settings and should be enabled in the Supabase Dashboard before public customer onboarding.
 - Migration `20261109064438_harden_public_api_grants.sql` removes `anon` access from existing `public` tables/sequences, removes direct `authenticated` access to the internal Gmail tables, and revokes default `anon`/`authenticated` privileges for new objects created by `postgres`. Existing authenticated access to company-scoped business tables remains governed by RLS.
 - Supabase's linter reports `pg_net` in the public extension namespace; the installed extension is non-relocatable in this project. Its HTTP functions remain in the dedicated `net` schema and are used only by the scheduled monitor.
