@@ -377,9 +377,9 @@ function openQuoteImport(){
     });
     if(error)throw error;
     closeModal();
-    await window.snabproRefreshQuotes?.();
-    toast('КП сохранено в базе предприятия и добавлено в сравнение');
-   }catch(error){btn.disabled=false;btn.textContent='Сохранить КП';toast('Не удалось сохранить КП: '+(error.message||'ошибка'));}
+   }catch(error){btn.disabled=false;btn.textContent='Сохранить КП';toast('Не удалось сохранить КП: '+(error.message||'ошибка'));return;}
+   try{await window.snabproRefreshQuotes?.();toast('КП сохранено в базе предприятия и добавлено в сравнение');}
+   catch(refreshError){toast('КП сохранено. Не удалось обновить экран — обновите страницу.');}
    return;
   }
   quoteOffers.push({id:Date.now(),material,supplier,unitPrice:price,qty,delivery,vat:vat==='yes'?'НДС включён':vat==='no'?'Без НДС':vat==='top'?'НДС сверху':'Не указано',lead,unit,spec:spec||'Характеристики не подтверждены',status:'Добавлено вручную',source:'Ручной ввод',currency,createdAt:new Date().toISOString()});
