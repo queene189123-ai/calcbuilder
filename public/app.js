@@ -106,7 +106,9 @@ function buildQuoteComparisons(){
   const currency=['RUB','USD','EUR'].includes(q.currency)?q.currency:'RUB';
   const qty=Number(q.qty),price=Number(q.unitPrice),delivery=Math.max(0,Number(q.delivery)||0);
   if(!q.material||!(qty>0)||!(price>0))return;
-  const vat=String(q.vat||'Не указано'),key=String(q.material)+'||'+currency+'||'+qty+'||'+String(q.unit||'')+'||'+vat;
+  const vat=String(q.vat||'Не указано');
+   if(!['НДС включён','Без НДС'].includes(vat))return;
+   const key=String(q.material)+'||'+currency+'||'+qty+'||'+String(q.unit||'')+'||'+vat;
   if(!groups.has(key))groups.set(key,[]);
   groups.get(key).push({...q,currency,total:qty*price+delivery});
  });
@@ -178,15 +180,15 @@ function openPurchase(){
 function showPurchase(id){
  const p=purchases.find(x=>x.id===id);if(!p)return;
  const drafts=emailDrafts.filter(d=>p.dbId?(d.requestId===p.dbId||d.batchId===p.dbId):(d.batchId===p.draftBatch));
- const offers=quoteOffers.filter(q=>p.name&&String(q.material||'').includes(p.name));
+ const offers=quoteOffers.filter(q=>p.dbId?q.requestId===p.dbId:p.name&&String(q.material||'').includes(p.name));
  const itemRows=(p.requestItems||[]).map(x=>'<tr><td>'+eh(x.name)+'</td><td>'+eh(x.spec||'—')+'</td><td>'+eh(x.qty)+'</td><td>'+eh(x.unit)+'</td></tr>').join('');
  const draftRows=drafts.map(d=>'<tr><td>'+eh(d.supplier||d.to)+'</td><td>'+eh(d.to)+'</td><td><span class="pill '+(['Отправлено','Получен ответ'].includes(d.status)?'green':'orange')+'">'+eh(d.status||'Черновик')+'</span></td></tr>').join('');
- const quoteRows=offers.map(q=>'<tr><td>'+eh(q.supplier)+'</td><td>'+money(q.unitPrice,q.currency)+' / '+eh(q.unit)+'</td><td>'+eh(q.qty)+' '+eh(q.unit)+'</td><td>'+money(q.delivery,q.currency)+'</td><td class="strong">'+money(q.qty*q.unitPrice+q.delivery,q.currency)+'</td></tr>').join('');
+ const quoteRows=offers.map(q=>{const vat=q.vat||'Не указано',taxKnown=['НДС включён','Без НДС'].includes(vat);return '<tr><td>'+eh(q.supplier)+'</td><td>'+money(q.unitPrice,q.currency)+' / '+eh(q.unit)+'</td><td>'+eh(q.qty)+' '+eh(q.unit)+'</td><td>'+money(q.delivery,q.currency)+'</td><td>'+eh(vat)+'</td><td class="strong">'+(taxKnown?money(q.qty*q.unitPrice+q.delivery,q.currency):'Не рассчитано')+'</td></tr>'}).join('');
  const body='<div class="notice '+(p.dbId?'':'warn')+'">'+(p.dbId?'Рабочая закупка · данные загружены из базы предприятия.':'Демонстрационная закупка. Для реальной работы войдите в аккаунт и выберите предприятие.')+'</div>'+
  '<div class="cards" style="grid-template-columns:repeat(2,1fr)"><div class="stat"><div class="statline">Поставщики</div><strong>'+Number(p.vendors||drafts.length||0)+'</strong></div><div class="stat"><div class="statline">Отправлено</div><strong>'+Number(p.sent??drafts.filter(d=>['Отправлено','Получен ответ'].includes(d.status)).length)+'</strong></div><div class="stat"><div class="statline">Получено ответов</div><strong>'+Number(p.replies??drafts.filter(d=>d.status==='Получен ответ').length)+'</strong></div><div class="stat"><div class="statline">Статус</div><strong style="font-size:13px">'+eh(p.status)+'</strong></div></div>'+
  '<div class="panel"><div class="panelhead"><h3>Позиции закупки</h3></div><div class="tablewrap"><table><thead><tr><th>Материал</th><th>Характеристики</th><th>Количество</th><th>Ед.</th></tr></thead><tbody>'+(itemRows||'<tr><td colspan="4" class="empty">'+eh(p.items||'Позиции не указаны')+'</td></tr>')+'</tbody></table></div></div>'+
  '<div class="panel" style="margin-top:12px"><div class="panelhead"><h3>Запросы поставщикам</h3><span class="pill">'+drafts.length+' писем</span></div><div class="tablewrap"><table><thead><tr><th>Поставщик</th><th>Email</th><th>Статус</th></tr></thead><tbody>'+(draftRows||'<tr><td colspan="3" class="empty">Черновики запросов не найдены</td></tr>')+'</tbody></table></div></div>'+
- '<div class="panel" style="margin-top:12px"><div class="panelhead"><h3>Полученные коммерческие предложения</h3><span class="pill">'+offers.length+' позиций КП</span></div><div class="tablewrap"><table><thead><tr><th>Поставщик</th><th>Цена</th><th>Количество</th><th>Доставка</th><th>Итого</th></tr></thead><tbody>'+(quoteRows||'<tr><td colspan="5" class="empty">КП по этой закупке пока не получены</td></tr>')+'</tbody></table></div></div>'+
+ '<div class="panel" style="margin-top:12px"><div class="panelhead"><h3>Полученные коммерческие предложения</h3><span class="pill">'+offers.length+' позиций КП</span></div><div class="tablewrap"><table><thead><tr><th>Поставщик</th><th>Цена</th><th>Количество</th><th>Доставка</th><th>НДС</th><th>Итого</th></tr></thead><tbody>'+(quoteRows||'<tr><td colspan="6" class="empty">КП по этой закупке пока не получены</td></tr>')+'</tbody></table></div></div>'+
  '<div class="modalfoot">'+(drafts.length?'<button class="btn primary" onclick="closeModal();showRequestPreview(\''+(p.dbId||p.draftBatch||'')+'\')">Открыть письма поставщикам</button>':'')+'<button class="btn" onclick="closeModal();go(\'quotes\')">Открыть сравнение КП</button><button class="btn" onclick="closeModal()">Закрыть</button>'+(p.status!=='Завершена'?'<button class="btn" id="modalSave">Завершить закупку</button>':'')+'</div>';
  modal(p.name,body,()=>{p.status='Завершена';save();renderAll();toast('Закупка завершена');return true});
 }
@@ -325,7 +327,7 @@ async function loadCompanyQuotes(company){
   const supplier=supplierById.get(quote.supplier_id);
   const qty=Number(item.quantity??requestItem?.quantity)||1;
   const deliveryShare=deliveryByItemId.get(item.id)||0;
-  return [{id:item.id,dbQuoteId:quote.id,material,supplier:supplier?.name||'Поставщик',unitPrice:Number(item.unit_price)||0,qty,delivery:deliveryShare,vat:item.vat_included===true?'НДС включён':item.vat_included===false?(item.specification?.vat_label==='top'?'НДС сверху':'Без НДС'):'Не указано',lead:Number(item.specification?.lead_time_days)||Number(quote.lead_time_days)||0,unit:item.unit||requestItem?.unit||'шт.',spec:spec||'Характеристики не указаны',status:item.source_excerpt==='Ручной ввод'?'Добавлено вручную':'Получено из почты',source:item.source_excerpt||quote.notes||'Письмо поставщика',currency:quote.currency||'RUB',createdAt:item.created_at||quote.created_at||null}];
+  return [{id:item.id,dbQuoteId:quote.id,requestId:quote.request_id,requestItemId:item.request_item_id,material,supplier:supplier?.name||'Поставщик',unitPrice:Number(item.unit_price)||0,qty,delivery:deliveryShare,vat:item.vat_included===true?'НДС включён':item.vat_included===false?(item.specification?.vat_label==='top'?'НДС сверху':'Без НДС'):'Не указано',lead:Number(item.specification?.lead_time_days)||Number(quote.lead_time_days)||0,unit:item.unit||requestItem?.unit||'шт.',spec:spec||'Характеристики не указаны',status:item.source_excerpt==='Ручной ввод'?'Добавлено вручную':'Получено из почты',source:item.source_excerpt||quote.notes||'Письмо поставщика',currency:quote.currency||'RUB',createdAt:item.created_at||quote.created_at||null}];
  });
  localStorage.setItem('sp_quotes',JSON.stringify(quoteOffers));
  syncQuoteMaterialOptions(true,true);renderQuotes();renderPriceHistory();renderDashboard();
