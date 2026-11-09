@@ -525,3 +525,9 @@ grant execute on all functions in schema public to authenticated;
 grant execute on all functions in schema private to authenticated;
 revoke execute on all functions in schema private from public, anon;
 alter default privileges in schema public revoke all on tables from anon, authenticated;
+
+-- Keep the trigger-only helper non-callable by application users.
+revoke execute on function private.add_company_creator_as_owner() from public, anon, authenticated;
+grant execute on function private.is_company_member(uuid, uuid) to authenticated;
+grant execute on function private.create_company_for_current_user(text) to authenticated;
+grant execute on function private.create_manual_quote(uuid, text, text, text, text, numeric, text, numeric, numeric, text, text, integer) to authenticated;
