@@ -129,7 +129,7 @@ async function syncCompany(connection: any) {
     const fromEmail = (from.match(/<([^>]+)>/)?.[1] || from).trim().toLowerCase();
     if (!fromEmail || fromEmail === String(connection.gmail_address || "").toLowerCase()) continue;
     const subject = header(headers, "Subject");
-    const tokenMatch = subject.match(/\\[(SP-[A-Z0-9-]+)\\]/i);
+    const tokenMatch = subject.match(/\[(SP-[A-Z0-9-]+)\]/i);
     const subjectToken = tokenMatch?.[1] || null;
     const requestLink = subjectToken ? (links || []).find((x: any) =>
       String(x.subject_token).toLowerCase() === subjectToken.toLowerCase() &&
