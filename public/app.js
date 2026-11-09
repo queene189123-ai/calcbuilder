@@ -292,7 +292,7 @@ async function loadCompanyQuotes(company){
   return [{id:item.id,dbQuoteId:quote.id,material,supplier:supplier?.name||'Поставщик',unitPrice:Number(item.unit_price)||0,qty,delivery:deliveryShare,vat:item.vat_included===true?'НДС включён':item.vat_included===false?'Без НДС':'Не указано',lead:Number(item.specification?.lead_time_days)||Number(quote.lead_time_days)||0,unit:item.unit||requestItem?.unit||'шт.',spec:spec||'Характеристики не указаны',status:'Получено из почты',source:item.source_excerpt||quote.notes||'Письмо поставщика',currency:quote.currency||'RUB',createdAt:item.created_at||quote.created_at||null}];
  });
  localStorage.setItem('sp_quotes',JSON.stringify(quoteOffers));
- syncQuoteMaterialOptions(true);renderQuotes();
+ syncQuoteMaterialOptions(true);renderQuotes();renderPriceHistory();renderDashboard();
 }
 window.snabproRefreshQuotes=async()=>{const company=window.snabproGetCompany?.();if(!company)throw new Error('Предприятие не выбрано');await loadCompanyQuotes(company);return quoteOffers.length};
 function renderQuotes(){
