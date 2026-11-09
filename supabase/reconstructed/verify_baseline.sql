@@ -76,9 +76,16 @@ begin
   if v_columns <> 147 then raise exception 'Expected 147 public columns, found %', v_columns; end if;
   if v_constraints <> 75 then raise exception 'Expected 75 constraints, found %', v_constraints; end if;
   if v_indexes <> 62 then raise exception 'Expected 62 public indexes, found %', v_indexes; end if;
-  if v_policies <> 23 then raise exception 'Expected 23 public/storage policies, found %', v_policies; end if;
+  if v_policies <> 32 then raise exception 'Expected 32 public/storage policies, found %', v_policies; end if;
   if v_functions <> 6 then raise exception 'Expected 6 public/private functions, found %', v_functions; end if;
   if v_rls_tables <> 17 then raise exception 'Expected RLS on all 17 public tables, found %', v_rls_tables; end if;
+
+  if not exists (select 1 from pg_policies where schemaname='public' and tablename='supplier_quotes' and policyname='buyers can insert supplier quotes' and cmd='INSERT')
+     or not exists (select 1 from pg_policies where schemaname='public' and tablename='quote_items' and policyname='buyers can insert quote items' and cmd='INSERT')
+     or not exists (select 1 from pg_policies where schemaname='public' and tablename='quote_documents' and policyname='buyers can insert quote documents' and cmd='INSERT')
+     or not exists (select 1 from pg_policies where schemaname='storage' and tablename='objects' and policyname='buyers can upload quote docs' and cmd='INSERT')
+     or exists (select 1 from pg_policies where schemaname='public' and tablename in ('supplier_quotes','quote_items','quote_documents') and policyname like 'members can manage%')
+  then raise exception 'Buyer-role write policies are missing or legacy broad policies remain'; end if;
 
   if not exists (
     select 1 from storage.buckets
@@ -115,6 +122,6 @@ begin
      or has_table_privilege('authenticated', 'public.supplier_email_messages', 'SELECT')
   then raise exception 'A client role has direct SELECT privilege on an internal Gmail table'; end if;
 
-  raise notice 'SnabPro baseline verification passed: 17 tables, 147 columns, 75 constraints, 62 indexes, 23 policies, 6 functions, RLS and protected RPC/storage settings.';
+  raise notice 'SnabPro baseline verification passed: 17 tables, 147 columns, 75 constraints, 62 indexes, 32 policies, 6 functions, RLS and protected RPC/storage settings.';
 end
 $$;
