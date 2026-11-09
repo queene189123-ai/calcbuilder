@@ -490,7 +490,12 @@ async function openDocumentReview(documentId){
  const catalogOptions=(matches,selected='')=>'<option value="">Не сопоставлять со справочником</option>'+matches.map(x=>'<option value="'+eh(x.material.id)+'" '+(x.material.id===selected?'selected':'')+'>'+eh(x.material.name)+' · '+Math.round(x.score*100)+'%</option>').join('');
  const supplierOptions=suppliersList.map(x=>'<option value="'+eh(x.id)+'" '+(x.id===doc.supplier_id?'selected':'')+'>'+eh(x.name)+'</option>').join('');
  const requestOptions='<option value="'+createRequestValue+'" '+(initialRequest===createRequestValue?'selected':'')+'>＋ Создать новую закупку из этого КП</option>'+requests.map(x=>'<option value="'+eh(x.id)+'" '+(x.id===initialRequest?'selected':'')+'>'+eh(x.title)+'</option>').join('');
- const parsedLineItems=[...textPreview.matchAll(/(\d{1,2})\s+(Лист.+?)\s+(\d+(?:[.,]\d+)?)\s+(лист|шт\.?|м|кг)\s+([\d\s]+,[0-9]{2})\s+([\d\s]+,[0-9]{2})/gi)].map(m=>({description:m[2].trim(),quantity:Number(m[3].replace(',','.')),unit:m[4],price:Number(m[5].replace(/\s/g,'').replace(',','.'))})).filter(x=>x.description&&x.quantity>0&&x.price>0);
+ const parsedLineItems=Array.isArray(ex.line_items)?ex.line_items.map(x=>({
+  description:String(x.description||'').trim(),
+  spec:typeof x.specification==='string'?x.specification:(x.specification?.text||''),
+  quantity:Number(x.quantity||0),unit:String(x.unit||''),
+  price:Number(x.unit_price??x.price??0),total:Number(x.total||0)
+ })).filter(x=>x.description):[...textPreview.matchAll(/(\d{1,2})\s+(Лист.+?)\s+(\d+(?:[.,]\d+)?)\s+(лист|шт\.?|м|кг)\s+([\d\s]+,[0-9]{2})\s+([\d\s]+,[0-9]{2})/gi)].map(m=>({description:m[2].trim(),quantity:Number(m[3].replace(',','.')),unit:m[4],price:Number(m[5].replace(/\s/g,'').replace(',','.'))})).filter(x=>x.description&&x.quantity>0&&x.price>0);
  const priceMatches=[...textPreview.matchAll(/(?:^|\s)\d{1,2}\s+.{3,180}?\s+\d+(?:[.,]\d+)?\s+(?:лист|шт\.?|м|метр|упак\.?)\s+([\d\s]+[,.]\d{2})(?=\s|$)/gim)].map(m=>Number(m[1].replace(/\s/g,'').replace(',','.'))).filter(n=>n>0);
  const detectedRows=Math.max(parsedLineItems.length,(textPreview.match(/\b\d+\s*(?:лист(?:ов|а)?|шт\.?|м)\b/gi)||[]).length);
  const deliveryMatch=textPreview.match(/Доставка[^0-9]{0,80}([\d\s]+(?:[,.][0-9]{2})?)\s*₽/i);
