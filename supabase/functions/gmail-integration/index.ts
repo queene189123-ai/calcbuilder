@@ -229,7 +229,7 @@ Deno.serve(async (req) => {
         attachments: m.attachments || [],
         extracted: m.extracted_data || {},
         processingStatus: m.processing_status,
-        supplierName: supplierById.get(m.supplier_id)?.name || null,
+        supplierName: (supplierById.get(m.supplier_id) || (supplierResult.data || []).find((s: any) => String(s.email || "").trim().toLowerCase() === String(m.from_email || "").trim().toLowerCase()))?.name || null,
         requestId: m.request_id || null,
         requestTitle: requestById.get(m.request_id)?.title || null,
         requestItems: itemsByRequest.get(m.request_id) || []
