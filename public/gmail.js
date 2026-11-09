@@ -217,7 +217,7 @@
       const importButton=ev.target.closest("[data-import-document]");
       if(importButton){
         const panel=importButton.closest("[data-file-result]"),card=importButton.closest("article");
-        const rows=Array.from(panel.querySelectorAll("[data-import-line]")).map(row=>({requestItemId:row.querySelector("[data-import-item]")?.value||"",quantity:Number(row.querySelector("[data-import-qty]")?.value),unitPrice:Number(row.querySelector("[data-import-price]")?.value)})).filter(x=>x.requestItemId);
+        const rows=Array.from(panel.querySelectorAll("[data-import-line]")).map(row=>({lineIndex:Number(row.dataset.importLine),requestItemId:row.querySelector("[data-import-item]")?.value||"",quantity:Number(row.querySelector("[data-import-qty]")?.value),unitPrice:Number(row.querySelector("[data-import-price]")?.value)})).filter(x=>x.requestItemId);
         if(!rows.length){showToast?.("Сопоставьте хотя бы одну позицию с закупкой.");return;}
         if(rows.some(x=>!Number.isFinite(x.quantity)||x.quantity<=0||!Number.isFinite(x.unitPrice)||x.unitPrice<=0)){showToast?.("Проверьте количество и цену в выбранных строках.");return;}
         importButton.disabled=true;importButton.textContent="Добавляем позиции…";
