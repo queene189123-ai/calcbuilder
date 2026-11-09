@@ -238,7 +238,16 @@ function normalizeDrafts(list){
 }
 emailDrafts=normalizeDrafts(emailDrafts);
 localStorage.setItem('sp_email_drafts',JSON.stringify(emailDrafts));
-window.snabproMarkDraftSent=draftId=>{const d=emailDrafts.find(x=>x.id===draftId);if(d)d.status='Отправлено';localStorage.setItem('sp_email_drafts',JSON.stringify(emailDrafts));};
+window.snabproMarkDraftSent=draftId=>{
+ const d=emailDrafts.find(x=>x.id===draftId);if(!d)return;
+ d.status='Отправлено';
+ const requestId=d.requestId||d.batchId;
+ const batch=emailDrafts.filter(x=>(x.requestId||x.batchId)===requestId||x.batchId===requestId);
+ const p=purchases.find(x=>x.dbId===requestId||x.draftBatch===requestId);
+ if(p){p.vendors=batch.length;p.replies=batch.filter(x=>x.status==='Отправлено').length;p.status=p.replies===p.vendors?'Ожидаем ответы':'Частично отправлено';}
+ localStorage.setItem('sp_email_drafts',JSON.stringify(emailDrafts));
+ if(p){save();renderPurchases();renderDashboard();}
+};
 const money=(n,currency='RUB')=>{const code=['RUB','USD','EUR'].includes(currency)?currency:'RUB';return new Intl.NumberFormat('ru-RU',{style:'currency',currency:code,maximumFractionDigits:code==='RUB'?0:2}).format(Number(n)||0)};
 function quotesForSelected(){let m=$('quoteMaterial')?.value||'Труба нержавеющая Ø25 мм';return quoteOffers.filter(q=>q.material===m)}
 function syncQuoteMaterialOptions(preferFirst=false,replace=false){
