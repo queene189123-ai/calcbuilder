@@ -24,13 +24,75 @@ async function getUser(req: Request) {
   return data.user;
 }
 
+function numberValue(value: string) {
+  const cleaned = String(value || "").replace(/[^0-9,.-]/g, "").replace(/\s/g, "");
+  if (!cleaned) return null;
+  const normalized = cleaned.includes(",") && cleaned.includes(".")
+    ? (cleaned.lastIndexOf(",") > cleaned.lastIndexOf(".") ? cleaned.replace(/\./g, "").replace(",", ".") : cleaned.replace(/,/g, ""))
+    : cleaned.replace(",", ".");
+  const n = Number(normalized);
+  return Number.isFinite(n) ? n : null;
+}
+function detectCurrency(value: string) {
+  if (/₽|руб|RUB/i.test(value)) return "RUB";
+  if (/USD|\$/i.test(value)) return "USD";
+  if (/EUR|€/i.test(value)) return "EUR";
+  return null;
+}
+function parseLineItems(text: string) {
+  const rows = text.split(/\r?\n/).map(line => line.split(/\s*\|\s*/).map(cell => cell.trim()).filter(Boolean)).filter(row => row.length >= 2);
+  const items: any[] = [];
+  const aliases: Record<string, string[]> = {
+    description: ["наименование", "товар", "материал", "позиция", "номенклатура", "описание", "product", "item", "name"],
+    specification: ["характеристика", "спецификация", "марка", "размер", "стандарт", "параметры", "grade", "specification"],
+    quantity: ["количество", "кол-во", "кол.", "qty", "quantity"],
+    unit: ["ед.", "ед изм", "единица", "единица измерения", "unit"],
+    unit_price: ["цена", "цена за", "стоимость за", "price", "unit price"],
+    total: ["сумма", "итого", "стоимость", "total", "amount"]
+  };
+  const norm = (s: string) => s.toLowerCase().replace(/ё/g, "е").replace(/[^a-zа-я0-9]+/g, " ").trim();
+  let header: Record<string, number> | null = null;
+  for (let ri = 0; ri < Math.min(rows.length, 80); ri++) {
+    const cells = rows[ri].map(norm);
+    const found: Record<string, number> = {};
+    for (const [key, names] of Object.entries(aliases)) {
+      const idx = cells.findIndex(cell => names.some(name => cell === norm(name) || cell.includes(norm(name))));
+      if (idx >= 0) found[key] = idx;
+    }
+    if (found.description !== undefined && (found.quantity !== undefined || found.unit_price !== undefined || found.total !== undefined)) {
+      header = found;
+      for (let j = ri + 1; j < rows.length && items.length < 150; j++) {
+        const row = rows[j];
+        const get = (key: string) => header![key] === undefined ? "" : (row[header![key]] || "");
+        const description = get("description");
+        if (!description || /^(итого|всего|ндс|сумма к оплате|подпись)/i.test(description)) continue;
+        const quantity = numberValue(get("quantity"));
+        const unitPrice = numberValue(get("unit_price"));
+        const total = numberValue(get("total"));
+        const spec = get("specification");
+        const unit = get("unit");
+        if (quantity === null && unitPrice === null && total === null) continue;
+        items.push({
+          description: description.slice(0, 500),
+          specification: spec ? { text: spec.slice(0, 500) } : {},
+          quantity, unit: unit.slice(0, 40) || null,
+          unit_price: unitPrice, total,
+          currency: detectCurrency(row.join(" ")) || "RUB",
+          confidence: 0.75, source_excerpt: row.join(" | ").slice(0, 1000)
+        });
+      }
+      break;
+    }
+  }
+  return items;
+}
 function parseText(text: string) {
   const prices = [...text.matchAll(/([0-9][0-9\s]*(?:[.,][0-9]{1,2})?)\s*(₽|руб(?:\.|лей|ля)?|RUB|USD|EUR|€|\$)/gi)]
     .map(m => ({
-      amount: Number(m[1].replace(/\s/g, "").replace(",", ".")),
-      currency: /₽|руб|RUB/i.test(m[2]) ? "RUB" : /USD|\$/i.test(m[2]) ? "USD" : "EUR",
+      amount: numberValue(m[1]) || 0,
+      currency: detectCurrency(m[2]) || "RUB",
       excerpt: m[0]
-    })).filter(x => Number.isFinite(x.amount) && x.amount > 0).slice(0, 20);
+    })).filter(x => x.amount > 0).slice(0, 20);
   const lead = text.match(/(?:срок\s*(?:поставки|изготовления)?|поставка|отгрузка)[^\n]{0,80}?([0-9]{1,3})\s*(?:рабочих?\s*)?(дн(?:я|ей)?|день|сут(?:ок)?|недел(?:я|и|ь))/i);
   const delivery = text.match(/(?:доставка|транспортные расходы)[^\n]{0,80}?([0-9][0-9\s]*(?:[.,][0-9]{1,2})?)\s*(₽|руб(?:\.|лей|ля)?|RUB)/i);
   const vat = /ндс\s+сверху|плюс\s+ндс|\+\s*ндс/i.test(text) ? "НДС сверху" :
@@ -41,13 +103,13 @@ function parseText(text: string) {
     /нет в наличии|отсутствует/i.test(text) ? "Нет в наличии" : null;
   return {
     price_candidates: prices,
+    line_items: parseLineItems(text),
     lead_time_days: lead ? Number(lead[1]) * (/недел/i.test(lead[2]) ? 7 : 1) : null,
-    delivery_cost: delivery ? Number(delivery[1].replace(/\s/g, "").replace(",", ".")) : null,
-    vat, availability, needs_review: true, extraction_method: "rules_v1",
+    delivery_cost: delivery ? numberValue(delivery[1]) : null,
+    vat, availability, needs_review: true, extraction_method: "rules_v2",
     text_preview: text.slice(0, 12000)
   };
 }
-
 function decodeText(bytes: Uint8Array) {
   try { return new TextDecoder("utf-8", { fatal: true }).decode(bytes); }
   catch { return new TextDecoder("windows-1251").decode(bytes); }
@@ -75,8 +137,21 @@ async function extractFile(bytes: Uint8Array, filename: string, mime: string) {
     for (let pageNo = 1; pageNo <= Math.min(pdf.numPages, 60); pageNo++) {
       const page = await pdf.getPage(pageNo);
       const content = await page.getTextContent();
-      const line = (content.items as any[]).map(item => item.str || "").filter(Boolean).join(" ");
-      if (line) lines.push(line);
+      const positioned = (content.items as any[]).filter(item => item.str && String(item.str).trim()).map(item => ({
+        text: String(item.str).trim(), x: Number(item.transform?.[4] || 0), y: Number(item.transform?.[5] || 0)
+      }));
+      const grouped: { y: number; cells: { x: number; text: string }[] }[] = [];
+      for (const item of positioned) {
+        let row = grouped.find(candidate => Math.abs(candidate.y - item.y) <= 2.5);
+        if (!row) { row = { y: item.y, cells: [] }; grouped.push(row); }
+        row.cells.push({ x: item.x, text: item.text });
+      }
+      grouped.sort((a, b) => b.y - a.y);
+      for (const row of grouped) {
+        row.cells.sort((a, b) => a.x - b.x);
+        const line = row.cells.map(cell => cell.text).join(" | ");
+        if (line.trim()) lines.push(line);
+      }
       if (lines.join("\n").length > 50000) break;
     }
     return lines.join("\n").slice(0, 50000);
