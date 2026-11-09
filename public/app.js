@@ -112,7 +112,7 @@ function buildQuoteComparisons(){
   const identity=q.requestItemId?'request:'+q.requestItemId:'material:'+String(q.material)+'||'+requestedQty+'||'+unit;
   const key=[identity,currency,unit,vat,requestedQty].join('||');
   if(!groups.has(key))groups.set(key,[]);
-  groups.get(key).push({...q,currency,comparisonQty:requestedQty,total:requestedQty*price+delivery});
+  groups.get(key).push({...q,currency,comparisonQty:requestedQty,comparisonDelivery:delivery*requestedQty/qty,total:requestedQty*price+delivery*requestedQty/qty});
  });
  return [...groups.values()].filter(a=>a.length>=2).map(a=>{
   a.sort((x,y)=>x.total-y.total);
@@ -340,7 +340,7 @@ function renderQuotes(){
  const currencies=[...new Set(arr.map(q=>q.currency||'RUB'))],quantities=[...new Set(arr.map(q=>String(Number(q.requestedQty)||q.qty)+' '+String(q.unit||'')))],vatTypes=[...new Set(arr.map(q=>q.vat||'Не указано'))];
  const eligible=arr.filter(q=>Number(q.qty)>0&&Number(q.unitPrice)>0&&(Number(q.qty)+0.0001>=(Number(q.requestedQty)||Number(q.qty))));
  const comparable=currencies.length<=1&&quantities.length<=1&&vatTypes.length===1&&['НДС включён','Без НДС'].includes(vatTypes[0])&&eligible.length===arr.length&&arr.length>0;
- const sorted=arr.map(q=>{const comparisonQty=Number(q.requestedQty)||Number(q.qty);return {...q,currency:q.currency||'RUB',comparisonQty,total:comparisonQty*Number(q.unitPrice||0)+Number(q.delivery||0)}}).sort((a,b)=>comparable?a.total-b.total:String(a.supplier).localeCompare(String(b.supplier),'ru'));
+ const sorted=arr.map(q=>{const comparisonQty=Number(q.requestedQty)||Number(q.qty);const comparisonDelivery=Number(q.qty)>0?Number(q.delivery||0)*comparisonQty/Number(q.qty):Number(q.delivery||0);return {...q,currency:q.currency||'RUB',comparisonQty,comparisonDelivery,total:comparisonQty*Number(q.unitPrice||0)+comparisonDelivery}}).sort((a,b)=>comparable?a.total-b.total:String(a.supplier).localeCompare(String(b.supplier),'ru'));
  const best=comparable?sorted[0]:null,worst=comparable?sorted[sorted.length-1]:null;
  body.innerHTML=sorted.map((q,i)=>{const isBest=!!best&&i===0;return '<tr class="'+(isBest?'bestrow':'')+'"><td>'+eh(q.supplier)+'</td><td>'+money(q.unitPrice,q.currency)+' / '+eh(q.unit)+'</td><td>'+q.qty+' '+eh(q.unit)+'</td><td>'+money(q.delivery,q.currency)+'</td><td>'+eh(q.vat)+'</td><td>'+q.lead+' дн.</td><td class="strong">'+(vatTypes.length===1&&['НДС включён','Без НДС'].includes(vatTypes[0])&&eligible.includes(q)?money(q.total,q.currency):'Не рассчитано')+'</td><td><span class="pill '+(isBest?'green':'')+'">'+(isBest?'Самая низкая сумма':eh(q.status))+'</span></td></tr>'}).join('')||'<tr><td colspan="8" class="empty">Пока нет предложений для этой позиции. Добавьте КП.</td></tr>';
  $('quoteCount').textContent=new Set(quoteOffers.map(q=>q.dbQuoteId||q.id)).size;
