@@ -231,11 +231,13 @@ localStorage.setItem('sp_email_drafts',JSON.stringify(emailDrafts));
 window.snabproMarkDraftSent=draftId=>{const d=emailDrafts.find(x=>x.id===draftId);if(d)d.status='Отправлено';localStorage.setItem('sp_email_drafts',JSON.stringify(emailDrafts));};
 const money=(n,currency='RUB')=>{const code=['RUB','USD','EUR'].includes(currency)?currency:'RUB';return new Intl.NumberFormat('ru-RU',{style:'currency',currency:code,maximumFractionDigits:code==='RUB'?0:2}).format(Number(n)||0)};
 function quotesForSelected(){let m=$('quoteMaterial')?.value||'Труба нержавеющая Ø25 мм';return quoteOffers.filter(q=>q.material===m)}
-function syncQuoteMaterialOptions(preferFirst=false){
+function syncQuoteMaterialOptions(preferFirst=false,replace=false){
  const select=$('quoteMaterial');if(!select)return;
  const current=select.value,labels=[...new Set(quoteOffers.map(q=>q.material).filter(Boolean))];
+ if(replace)select.innerHTML='';
  const known=new Set([...select.options].map(o=>o.value));
  labels.forEach(label=>{if(!known.has(label)){const option=document.createElement('option');option.value=label;option.textContent=label;select.appendChild(option)}});
+ if(!labels.length&&replace){const option=document.createElement('option');option.value='';option.textContent='Нет сохранённых КП';select.appendChild(option);}
  if(preferFirst&&labels.length)select.value=labels[0];
  else if(current&&[...select.options].some(o=>o.value===current))select.value=current;
 }
@@ -292,7 +294,7 @@ async function loadCompanyQuotes(company){
   return [{id:item.id,dbQuoteId:quote.id,material,supplier:supplier?.name||'Поставщик',unitPrice:Number(item.unit_price)||0,qty,delivery:deliveryShare,vat:item.vat_included===true?'НДС включён':item.vat_included===false?'Без НДС':'Не указано',lead:Number(item.specification?.lead_time_days)||Number(quote.lead_time_days)||0,unit:item.unit||requestItem?.unit||'шт.',spec:spec||'Характеристики не указаны',status:'Получено из почты',source:item.source_excerpt||quote.notes||'Письмо поставщика',currency:quote.currency||'RUB',createdAt:item.created_at||quote.created_at||null}];
  });
  localStorage.setItem('sp_quotes',JSON.stringify(quoteOffers));
- syncQuoteMaterialOptions(true);renderQuotes();renderPriceHistory();renderDashboard();
+ syncQuoteMaterialOptions(true,true);renderQuotes();renderPriceHistory();renderDashboard();
 }
 window.snabproRefreshQuotes=async()=>{const company=window.snabproGetCompany?.();if(!company)throw new Error('Предприятие не выбрано');await loadCompanyQuotes(company);return quoteOffers.length};
 function renderQuotes(){
@@ -312,7 +314,7 @@ function openQuoteImport(){
  modal('Добавить коммерческое предложение','<div class="notice">Введите данные из КП. Система посчитает итоговую стоимость с доставкой. Для реального внедрения распознавание документов будет автоматизировано.</div><div class="formgrid"><div class="field full"><label>Материал / позиция</label><select id="qiMaterial"><option>Труба нержавеющая Ø25 мм</option><option>Нержавеющая сталь AISI 304 · лист</option><option>АБС-пластик · лист 3 мм</option></select></div><div class="field"><label>Поставщик</label><input id="qiSupplier" placeholder="Название компании"></div><div class="field"><label>Цена за единицу, ₽</label><input id="qiPrice" type="number" min="0" placeholder="175"></div><div class="field"><label>Количество</label><input id="qiQty" type="number" min="1" value="300"></div><div class="field"><label>Доставка, ₽</label><input id="qiDelivery" type="number" min="0" value="0"></div><div class="field"><label>НДС</label><select id="qiVat"><option>НДС включён</option><option>Без НДС</option><option>НДС сверху</option><option>Не указано</option></select></div><div class="field"><label>Срок, дней</label><input id="qiLead" type="number" min="0" value="3"></div><div class="field full"><label>Характеристики / примечание</label><input id="qiSpec" placeholder="Марка, размеры, толщина, стандарт"></div></div><div class="modalfoot"><button class="btn" onclick="closeModal()">Отмена</button><button class="btn primary" id="modalSave">Сохранить КП</button></div>',()=>{
  const supplier=$('qiSupplier').value.trim(),price=Number($('qiPrice').value),qty=Number($('qiQty').value),delivery=Number($('qiDelivery').value||0);
  if(!supplier||!(price>0)||!(qty>0)){toast('Укажите поставщика, цену и количество');return false}
- const material=$('qiMaterial').value;quoteOffers.push({id:Date.now(),material,supplier,unitPrice:price,qty,delivery,vat:$('qiVat').value,lead:Number($('qiLead').value||0),unit:material.includes('Труба')?'м':'лист',spec:$('qiSpec').value||'Характеристики не подтверждены',status:'Добавлено вручную',source:'Ручной ввод'});localStorage.setItem('sp_quotes',JSON.stringify(quoteOffers));renderQuotes();toast('КП добавлено в сравнение');return true;
+ const material=$('qiMaterial').value;quoteOffers.push({id:Date.now(),material,supplier,unitPrice:price,qty,delivery,vat:$('qiVat').value,lead:Number($('qiLead').value||0),unit:material.includes('Труба')?'м':'лист',spec:$('qiSpec').value||'Характеристики не подтверждены',status:'Добавлено вручную',source:'Ручной ввод'});localStorage.setItem('sp_quotes',JSON.stringify(quoteOffers));syncQuoteMaterialOptions();renderQuotes();renderPriceHistory();renderDashboard();toast('КП добавлено в сравнение');return true;
  });
 }
 let previewDrafts=[];
