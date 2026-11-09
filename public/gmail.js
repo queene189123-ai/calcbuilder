@@ -59,7 +59,7 @@
   function renderInboxMessage(m) {
     const e=escapeHtml, x=m.extracted||{};
     const prices=(x.price_candidates||[]).map(p=>e(p.amount)+" "+e(p.currency)).join(", ")||"Не распознана";
-    const attachments=(m.attachments||[]).map(a=>{const ext=String(a.filename||"").toLowerCase().split(".").pop();return e(a.filename)+(["pdf","xlsx","xls"].includes(ext)?' <button type="button" data-process-file="'+e(m.gmailMessageId||m.gmail_message_id||m.id)+'" data-file-name="'+e(a.filename)+'">Извлечь данные</button>':"")}).join(" ");
+    const attachments=(m.attachments||[]).map(a=>{const ext=String(a.filename||"").toLowerCase().split(".").pop();return e(a.filename)+(["pdf","xlsx","xls","docx"].includes(ext)?' <button type="button" data-process-file="'+e(m.gmailMessageId||m.gmail_message_id||m.id)+'" data-file-name="'+e(a.filename)+'">Извлечь данные</button>':"")}).join(" ");
     const supplier=m.supplierName ? "Поставщик: "+e(m.supplierName) : "Поставщик не сопоставлен — проверьте email в карточке поставщика";
     const request=m.requestTitle ? "Заявка: "+e(m.requestTitle) : "";
     const reviewLabel=m.requestId ? "Связано с закупкой · нужна проверка" : m.supplierName ? "Поставщик найден · нужна проверка" : "Не сопоставлено с поставщиком";
