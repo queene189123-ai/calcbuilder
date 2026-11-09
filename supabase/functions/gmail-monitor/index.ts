@@ -123,7 +123,7 @@ async function syncCompany(connection: any) {
     const requestLink = subjectToken ? (links || []).find((x: any) =>
       String(x.subject_token).toLowerCase() === subjectToken.toLowerCase() &&
       String(x.supplier_email).toLowerCase() === fromEmail) : null;
-    const supplier = requestLink
+    const supplier = requestLink?.supplier_id
       ? (suppliers || []).find((s: any) => s.id === requestLink.supplier_id)
       : supplierByEmail.get(fromEmail);
     const texts: string[] = [], attachments: any[] = [];
