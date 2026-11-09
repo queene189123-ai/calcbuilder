@@ -163,6 +163,44 @@ Deno.serve(async (req) => {
       }
       return json({ ok: true, messageId: result.id, threadId: result.threadId });
     }
+    if (body.action === "import_document_lines") {
+      const companyId=String(body.companyId||"");
+      const documentId=String(body.documentId||"");
+      const lines=Array.isArray(body.lines)?body.lines.slice(0,80):[];
+      const currency=String(body.currency||"RUB").toUpperCase();
+      const vatLabel=String(body.vatLabel||"").toLowerCase();
+      const deliveryCost=Math.max(0,Number(body.deliveryCost)||0);
+      if(!(await canManagePurchasing(companyId,user.id)))return json({error:"Для добавления КП нужны права владельца, администратора или закупщика."},403);
+      if(!documentId||!lines.length||!["RUB","USD","EUR"].includes(currency)||!["","yes","no","top"].includes(vatLabel))return json({error:"Проверьте документ, валюту и выбранные позиции."},400);
+      const {data:doc,error:docError}=await admin.from("quote_documents").select("id,request_id,supplier_id,extracted_data,original_filename").eq("company_id",companyId).eq("id",documentId).maybeSingle();
+      if(docError)throw docError;
+      if(!doc||!doc.request_id||!doc.supplier_id)return json({error:"Документ не привязан к поставщику и закупке. Сначала сопоставьте письмо."},400);
+      const {data:existing,error:existingError}=await admin.from("supplier_quotes").select("id").eq("company_id",companyId).eq("document_id",documentId).limit(1);
+      if(existingError)throw existingError;
+      if(existing?.length)return json({ok:true,alreadyImported:true,saved:0,quoteId:existing[0].id});
+      const {data:request,error:requestError}=await admin.from("purchase_requests").select("id").eq("company_id",companyId).eq("id",doc.request_id).maybeSingle();
+      if(requestError)throw requestError;
+      if(!request)return json({error:"Закупка документа не найдена."},400);
+      const extracted=doc.extracted_data||{};
+      const sourceLines=Array.isArray(extracted.line_items)?extracted.line_items:[];
+      const valid:any[]=[];
+      for(const line of lines){
+        const requestItemId=String(line.requestItemId||"");
+        const quantity=Number(line.quantity),unitPrice=Number(line.unitPrice);
+        if(!requestItemId||!Number.isFinite(quantity)||quantity<=0||!Number.isFinite(unitPrice)||unitPrice<=0)return json({error:"В одной из выбранных строк некорректное количество или цена."},400);
+        const {data:item,error:itemError}=await admin.from("purchase_request_items").select("id,description,specification,quantity,unit").eq("company_id",companyId).eq("request_id",doc.request_id).eq("id",requestItemId).maybeSingle();
+        if(itemError)throw itemError;
+        if(!item)return json({error:"Одна из выбранных позиций не относится к закупке этого КП."},400);
+        valid.push({item,quantity,unitPrice});
+      }
+      const lead=body.leadTimeDays===""||body.leadTimeDays==null?null:Math.max(0,Math.round(Number(body.leadTimeDays)));
+      const {data:quote,error:quoteError}=await admin.from("supplier_quotes").insert({company_id:companyId,request_id:doc.request_id,supplier_id:doc.supplier_id,document_id:documentId,currency,delivery_cost:deliveryCost,lead_time_days:lead,notes:"Импортировано из документа: "+String(doc.original_filename||"КП").slice(0,180)}).select("id").single();
+      if(quoteError)throw quoteError;
+      const quoteItems=valid.map(({item,quantity,unitPrice},index)=>({company_id:companyId,quote_id:quote.id,request_item_id:item.id,description:item.description,specification:{...(item.specification||{}),supplier_description:String(sourceLines[index]?.description||"").slice(0,500),supplier_specification:sourceLines[index]?.specification||{} ,vat_label:vatLabel},quantity,unit:item.unit,unit_price:unitPrice,vat_included:vatLabel==="yes"?true:vatLabel==="no"||vatLabel==="top"?false:null,confidence:0.75,source_excerpt:String(sourceLines[index]?.source_excerpt||"").slice(0,1000)||null}));
+      const {error:itemsError}=await admin.from("quote_items").insert(quoteItems);
+      if(itemsError){await admin.from("supplier_quotes").delete().eq("company_id",companyId).eq("id",quote.id);throw itemsError;}
+      return json({ok:true,quoteId:quote.id,saved:quoteItems.length});
+    }
     if (body.action === "save_quote") {
       const companyId=String(body.companyId||"");
       const messageId=String(body.messageId||"");
