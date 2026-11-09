@@ -86,6 +86,12 @@ async function recordRun(companyId: string, status: string, messagesSaved: numbe
 function header(headers: any[], name: string) {
   return headers.find(x => String(x.name || "").toLowerCase() === name.toLowerCase())?.value || "";
 }
+async function markSeen(companyId: string, messageId: string) {
+  const { error } = await db.from("gmail_monitor_seen_messages").upsert({
+    company_id: companyId, gmail_message_id: messageId, checked_at: new Date().toISOString()
+  }, { onConflict: "company_id,gmail_message_id", ignoreDuplicates: true });
+  if (error) throw error;
+}
 async function syncCompany(connection: any) {
   const companyId = connection.company_id;
   const refreshToken = await decrypt(connection.refresh_token_ciphertext);
@@ -120,14 +126,13 @@ async function syncCompany(connection: any) {
     });
     const metadata = await metadataResponse.json();
     if (!metadataResponse.ok) continue;
-    const { error: seenError } = await db.from("gmail_monitor_seen_messages").upsert({
-      company_id: companyId, gmail_message_id: messageId, checked_at: new Date().toISOString()
-    }, { onConflict: "company_id,gmail_message_id", ignoreDuplicates: true });
-    if (seenError) throw seenError;
     const headers = metadata.payload?.headers || [];
     const from = header(headers, "From");
     const fromEmail = (from.match(/<([^>]+)>/)?.[1] || from).trim().toLowerCase();
-    if (!fromEmail || fromEmail === String(connection.gmail_address || "").toLowerCase()) continue;
+    if (!fromEmail || fromEmail === String(connection.gmail_address || "").toLowerCase()) {
+      await markSeen(companyId, messageId);
+      continue;
+    }
     const subject = header(headers, "Subject");
     const tokenMatch = subject.match(/\[(SP-[A-Z0-9-]+)\]/i);
     const subjectToken = tokenMatch?.[1] || null;
@@ -137,7 +142,10 @@ async function syncCompany(connection: any) {
     const supplier = requestLink?.supplier_id
       ? (suppliers || []).find((s: any) => s.id === requestLink.supplier_id)
       : supplierByEmail.get(fromEmail);
-    if (!requestLink && !supplier) continue;
+    if (!requestLink && !supplier) {
+      await markSeen(companyId, messageId);
+      continue;
+    }
 
     const response = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/" + encodeURIComponent(messageId) + "?format=full", {
       headers: { Authorization: "Bearer " + token }
@@ -163,6 +171,9 @@ async function syncCompany(connection: any) {
     });
     if (!insertError) {
       saved++;
+      // Mark as seen only after the message is safely persisted. Transient Gmail/DB
+      // failures leave it eligible for the next scheduled sync.
+      await markSeen(companyId, messageId);
       if (requestLink) {
         const { error: replyStatusError } = await db.from("purchase_request_suppliers")
           .update({ status: "replied", replied_at: receivedAt || new Date().toISOString() })
