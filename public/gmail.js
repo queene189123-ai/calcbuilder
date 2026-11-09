@@ -34,7 +34,8 @@
     if (!companyId()) { if(statusEl()) statusEl().textContent="Сначала войдите и выберите предприятие."; return; }
     try {
       const d=await call("status");
-      if(statusEl()) statusEl().textContent=d.connected ? "Подключён: "+d.connection.gmail_address : "Gmail не подключён. Подключите рабочий ящик предприятия.";
+      if(statusEl()) statusEl().textContent=d.connected ? "Подключён: "+d.connection.gmail_address+" · автообновление каждые 10 минут" : "Gmail не подключён. Подключите рабочий ящик предприятия.";
+      if(d.connected) await inbox();
     } catch(e) { if(statusEl()) {statusEl().textContent=e.message;statusEl().classList.add("error");} }
   }
   async function connect() {
@@ -77,13 +78,25 @@
     const out=$("gmailInboxList"), b=$("gmailInbox");
     try {
       if(b){b.disabled=true;b.textContent="Синхронизируем…";}
-      if(out)out.textContent="Читаем новые письма и сопоставляем отправителей с базой поставщиков…";
-      const d=await call("inbox"), items=d.messages||[];
+      if(out)out.textContent="Загружаем письма, автоматически собранные системой…";
+      const d=await call("saved_inbox"), items=d.messages||[];
       const matched=items.filter(m=>m.supplierName).length, linked=items.filter(m=>m.requestId).length;
       out.innerHTML='<div style="font-size:11px;color:#78849a;margin:8px 0">Синхронизировано писем: '+items.length+' · распознано поставщиков: '+matched+' · привязано к заявкам: '+linked+'</div>'+
         (items.map(renderInboxMessage).join("")||"Новых входящих писем за последние 30 дней не найдено.");
     } catch(e) { if(out)out.textContent=e.message; }
-    finally {if(b){b.disabled=false;b.textContent="Проверить входящие";}}
+    finally {if(b){b.disabled=false;b.textContent="Показать входящие";}}
+  }
+
+  async function syncNow() {
+    const b=$("gmailSyncNow"), out=$("gmailInboxList");
+    try {
+      if(b){b.disabled=true;b.textContent="Синхронизируем…";}
+      if(out)out.textContent="Проверяем Gmail и сохраняем новые ответы поставщиков…";
+      const result=await call("inbox");
+      await inbox();
+      if(out)out.insertAdjacentHTML("afterbegin",'<div style="font-size:10px;color:#16856f;margin:6px 0">Синхронизация завершена · обработано писем: '+Number(result.synced||0)+'</div>');
+    } catch(e) { if(out)out.textContent=e.message; }
+    finally {if(b){b.disabled=false;b.textContent="Синхронизировать сейчас";}}
   }
 
   function insertSupplierRequest(){
@@ -153,6 +166,7 @@
   document.addEventListener("DOMContentLoaded",()=>{
     $("gmailConnect")?.addEventListener("click",connect);
     $("gmailInbox")?.addEventListener("click",inbox);
+    $("gmailSyncNow")?.addEventListener("click",syncNow);
     $("gmailInboxList")?.addEventListener("click",async function(ev){
       const fileButton=ev.target.closest("[data-process-file]");
       if(fileButton){
