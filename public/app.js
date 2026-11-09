@@ -334,7 +334,8 @@ window.snabproRefreshQuotes=async()=>{const company=window.snabproGetCompany?.()
 function renderQuotes(){
  const arr=quotesForSelected(),body=$('quotesBody');if(!body)return;
  const currencies=[...new Set(arr.map(q=>q.currency||'RUB'))],quantities=[...new Set(arr.map(q=>String(q.qty)+' '+String(q.unit||'')))],vatTypes=[...new Set(arr.map(q=>q.vat||'Не указано'))];
- const comparable=currencies.length<=1&&quantities.length<=1&&vatTypes.length<=1;
+ const vatKnown=vatTypes.length===1&&['НДС включён','Без НДС'].includes(vatTypes[0]);
+ const comparable=currencies.length<=1&&quantities.length<=1&&vatKnown;
  const sorted=arr.map(q=>({...q,currency:q.currency||'RUB',total:q.qty*q.unitPrice+q.delivery})).sort((a,b)=>a.currency===b.currency?a.total-b.total:a.currency.localeCompare(b.currency));
  const best=comparable?sorted[0]:null,worst=comparable?sorted[sorted.length-1]:null;
  body.innerHTML=sorted.map((q,i)=>{const isBest=!!best&&i===0;return '<tr class="'+(isBest?'bestrow':'')+'"><td>'+eh(q.supplier)+'</td><td>'+money(q.unitPrice,q.currency)+' / '+eh(q.unit)+'</td><td>'+q.qty+' '+eh(q.unit)+'</td><td>'+money(q.delivery,q.currency)+'</td><td>'+eh(q.vat)+'</td><td>'+q.lead+' дн.</td><td class="strong">'+money(q.total,q.currency)+'</td><td><span class="pill '+(isBest?'green':'')+'">'+(isBest?'Самая низкая сумма':eh(q.status))+'</span></td></tr>'}).join('')||'<tr><td colspan="8" class="empty">Пока нет предложений для этой позиции. Добавьте КП.</td></tr>';
@@ -342,7 +343,7 @@ function renderQuotes(){
  $('quoteQty').textContent=best?best.qty+' '+best.unit:arr.length?'Несопоставимые условия':'—';
  $('quoteBest').textContent=best?money(best.total,best.currency):arr.length?'Нужна сверка условий':'—';
  $('quoteSaving').textContent=best&&worst?money(worst.total-best.total,best.currency):'—';
- $('quoteVerdict').textContent=currencies.length>1?'Предложения указаны в разных валютах. Их нельзя корректно ранжировать без пересчёта в одну валюту.':quantities.length>1?'Различаются количество или единицы измерения. Сначала приведите предложения к одной партии.':vatTypes.length>1?'Различаются условия НДС ('+vatTypes.join(', ')+'). Сначала уточните сопоставимую цену.':best?'Лучшее по полной стоимости: '+best.supplier+' — '+money(best.total,best.currency)+'. Срок: '+best.lead+' дн. Спецификация: '+best.spec+'. Перед выбором подтвердите наличие, документы и соответствие характеристик.':'Добавьте предложения, чтобы сравнить итоговую стоимость.';
+ $('quoteVerdict').textContent=currencies.length>1?'Предложения указаны в разных валютах. Их нельзя корректно ранжировать без пересчёта в одну валюту.':quantities.length>1?'Различаются количество или единицы измерения. Сначала приведите предложения к одной партии.':vatTypes.length>1?'Различаются условия НДС ('+vatTypes.join(', ')+'). Сначала уточните сопоставимую цену.':arr.length&&!vatKnown?'Условия НДС не подтверждены или указано «НДС сверху» без ставки. Уточните налоговую составляющую у поставщика — до этого рейтинг полной стоимости не рассчитывается.':best?'Лучшее по полной стоимости: '+best.supplier+' — '+money(best.total,best.currency)+'. Срок: '+best.lead+' дн. Спецификация: '+best.spec+'. Перед выбором подтвердите наличие, документы и соответствие характеристик.':'Добавьте предложения, чтобы сравнить итоговую стоимость.';
  buildManagementReport();
 }
 function openQuoteImport(){
