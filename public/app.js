@@ -460,17 +460,34 @@ async function openDocumentReview(documentId){
   client.from('quote_documents').select('*').eq('id',documentId).eq('company_id',company.id).single(),
   client.from('suppliers').select('id,name,email').eq('company_id',company.id).order('name'),
   client.from('purchase_requests').select('id,title,status').eq('company_id',company.id).order('created_at',{ascending:false}),
-  client.from('purchase_request_items').select('id,request_id,description,specification,quantity,unit').eq('company_id',company.id)
+  client.from('purchase_request_items').select('id,request_id,material_id,description,specification,quantity,unit').eq('company_id',company.id),
+  client.from('materials').select('id,name,category,specification,unit,last_price').eq('company_id',company.id).eq('is_active',true).order('name')
  ]);
- for(const r of [docRes,supplierRes,requestRes,itemRes])if(r.error){toast('Не удалось открыть проверку: '+r.error.message);return;}
+ for(const r of [docRes,supplierRes,requestRes,itemRes,materialRes])if(r.error){toast('Не удалось открыть проверку: '+r.error.message);return;}
  const doc=docRes.data,ex=doc.extracted_data||{},candidate=(ex.price_candidates||[])[0]||{};
- const suppliersList=supplierRes.data||[],requests=requestRes.data||[],items=itemRes.data||[];
+ const suppliersList=supplierRes.data||[],requests=requestRes.data||[],items=itemRes.data||[],catalogMaterials=materialRes.data||[];
  const createRequestValue='__new__';
  const initialRequest=doc.request_id||createRequestValue;
  const requestItems=items.filter(x=>x.request_id===initialRequest);
  const textPreview=ex.text_preview||'';
  const currency=candidate.currency||'RUB';
  const itemOptions=(list,selected='')=>list.map(x=>'<option value="'+eh(x.id)+'" '+(x.id===selected?'selected':'')+'>'+eh(x.description)+' · '+eh(x.quantity)+' '+eh(x.unit)+'</option>').join('');
+ const normalizeMatchText=value=>String(value||'').toLowerCase().replace(/ё/g,'е').replace(/[×х]/g,'x').replace(/[^a-zа-я0-9.]+/g,' ').trim().split(/\\s+/).filter(token=>token.length>1);
+ const materialMatch=(description,specification='')=>{
+  const source=normalizeMatchText(description+' '+specification);
+  if(!source.length)return [];
+  const sourceSet=new Set(source);
+  return catalogMaterials.map(material=>{
+   const target=normalizeMatchText([material.name,material.category,material.specification?.text||'',material.specification?.brand||'',material.specification?.grade||''].join(' '));
+   const targetSet=new Set(target);
+   const common=[...sourceSet].filter(token=>targetSet.has(token)).length;
+   const dice=2*common/Math.max(1,sourceSet.size+targetSet.size);
+   const contains=String(material.name||'').toLowerCase().includes(String(description||'').toLowerCase().trim())&&String(description||'').trim().length>3;
+   const score=Math.min(1,dice+(contains?0.25:0));
+   return {material,score};
+  }).filter(x=>x.score>0.12).sort((a,b)=>b.score-a.score).slice(0,5);
+ };
+ const catalogOptions=(matches,selected='')=>'<option value="">Не сопоставлять со справочником</option>'+matches.map(x=>'<option value="'+eh(x.material.id)+'" '+(x.material.id===selected?'selected':'')+'>'+eh(x.material.name)+' · '+Math.round(x.score*100)+'%</option>').join('');
  const supplierOptions=suppliersList.map(x=>'<option value="'+eh(x.id)+'" '+(x.id===doc.supplier_id?'selected':'')+'>'+eh(x.name)+'</option>').join('');
  const requestOptions='<option value="'+createRequestValue+'" '+(initialRequest===createRequestValue?'selected':'')+'>＋ Создать новую закупку из этого КП</option>'+requests.map(x=>'<option value="'+eh(x.id)+'" '+(x.id===initialRequest?'selected':'')+'>'+eh(x.title)+'</option>').join('');
  const parsedLineItems=[...textPreview.matchAll(/(\d{1,2})\s+(Лист.+?)\s+(\d+(?:[.,]\d+)?)\s+(лист|шт\.?|м|кг)\s+([\d\s]+,[0-9]{2})\s+([\d\s]+,[0-9]{2})/gi)].map(m=>({description:m[2].trim(),quantity:Number(m[3].replace(',','.')),unit:m[4],price:Number(m[5].replace(/\s/g,'').replace(',','.'))})).filter(x=>x.description&&x.quantity>0&&x.price>0);
@@ -484,10 +501,15 @@ async function openDocumentReview(documentId){
   const makeRow=(i,itemId='',priceValue='',parsed=null)=>{
    const item=items.find(x=>x.id===itemId);
    const rowItems=items.filter(x=>x.request_id===initialRequest);
-   return '<div class="dr-quote-row" data-quote-row style="border:1px solid var(--line,#ddd);border-radius:10px;padding:12px;margin:10px 0">'+
+   const description=item?.description||parsed?.description||'';
+   const specification=item?.specification?.text||parsed?.spec||'';
+   const matches=materialMatch(description,specification);
+   const linkedMaterial=item?.material_id||((matches[0]?.score||0)>=0.72?matches[0].material.id:'');
+   return '<div class="dr-quote-row" data-quote-row data-material-id="'+eh(linkedMaterial)+'" style="border:1px solid var(--line,#ddd);border-radius:10px;padding:12px;margin:10px 0">'+
     '<div class="field full"><label>Связать с позицией существующей закупки (необязательно)</label><select data-row-item><option value="">Без привязки — создать позицию из строки КП</option>'+itemOptions(rowItems,itemId)+'</select></div>'+
-    '<div class="formgrid"><div class="field full"><label>Материал / наименование позиции</label><input data-row-description value="'+eh(item?.description||parsed?.description||'')+'" placeholder="Например, Ст3сп лист 1500×6000"></div>'+
-    '<div class="field full"><label>Характеристики</label><input data-row-spec value="'+eh(item?.specification?.text||'')+'" placeholder="Марка, толщина, размеры, стандарт"></div>'+
+    '<div class="field full"><label>Материал из справочника предприятия</label><select data-row-material>'+catalogOptions(matches,linkedMaterial)+'</select><div class="muted" data-match-hint style="font-size:12px;margin-top:4px">'+(matches.length?'Предложены совпадения по названию и характеристикам. Проверьте перед сохранением.':'Совпадение не найдено — позицию можно добавить без привязки.')+'</div></div>'+
+    '<div class="formgrid"><div class="field full"><label>Материал / наименование позиции</label><input data-row-description value="'+eh(description)+'" placeholder="Например, Ст3сп лист 1500×6000"></div>'+
+    '<div class="field full"><label>Характеристики</label><input data-row-spec value="'+eh(specification)+'" placeholder="Марка, толщина, размеры, стандарт"></div>'+
     '<div class="field"><label>Количество</label><input data-row-quantity type="number" min="0.0001" step="0.0001" value="'+eh(item?.quantity??parsed?.quantity??'')+'" placeholder="20"></div>'+
     '<div class="field"><label>Единица</label><input data-row-unit value="'+eh(item?.unit||parsed?.unit||'лист')+'" placeholder="лист, кг, м, шт."></div>'+
     '<div class="field"><label>Цена за единицу</label><input data-row-price type="number" min="0.0001" step="0.01" value="'+eh(priceValue)+'" placeholder="Введите цену"></div>'+
@@ -519,13 +541,39 @@ async function openDocumentReview(documentId){
   });
  };
  $('drRequest').addEventListener('change',refreshRowOptions);
+ const refreshMaterialSuggestions=row=>{
+  const matches=materialMatch(row.querySelector('[data-row-description]').value,row.querySelector('[data-row-spec]').value);
+  const current=row.dataset.materialId||'';
+  const preferred=matches.find(x=>x.material.id===current)?.material.id||((matches[0]?.score||0)>=0.72?matches[0].material.id:'');
+  row.querySelector('[data-row-material]').innerHTML=catalogOptions(matches,preferred);
+  row.dataset.materialId=preferred;
+  row.querySelector('[data-match-hint]').textContent=matches.length?'Совпадения рассчитаны по названию и характеристикам. Подтвердите правильность вручную.':'Совпадение не найдено — позицию можно добавить без привязки.';
+ };
+ rowsEl.addEventListener('input',e=>{
+  if(e.target.matches('[data-row-description],[data-row-spec]'))refreshMaterialSuggestions(e.target.closest('[data-quote-row]'));
+ });
  rowsEl.addEventListener('change',e=>{
-  const sel=e.target.closest('[data-row-item]');if(!sel||!sel.value)return;
-  const item=items.find(x=>x.id===sel.value),row=sel.closest('[data-quote-row]');if(!item||!row)return;
+  const materialSelect=e.target.closest('[data-row-material]');
+  if(materialSelect){
+   const row=materialSelect.closest('[data-quote-row]'),material=catalogMaterials.find(x=>x.id===materialSelect.value);
+   row.dataset.materialId=material?.id||'';
+   if(material){
+    row.querySelector('[data-row-description]').value=material.name||'';
+    row.querySelector('[data-row-spec]').value=material.specification?.text||'';
+    row.querySelector('[data-row-unit]').value=material.unit||'шт.';
+   }
+   return;
+  }
+  const sel=e.target.closest('[data-row-item]');if(!sel)return;
+  const row=sel.closest('[data-quote-row]');
+  if(!sel.value){row.dataset.materialId='';refreshMaterialSuggestions(row);return;}
+  const item=items.find(x=>x.id===sel.value);if(!item)return;
   row.querySelector('[data-row-description]').value=item.description||'';
   row.querySelector('[data-row-spec]').value=item.specification?.text||'';
   row.querySelector('[data-row-quantity]').value=item.quantity??'';
   row.querySelector('[data-row-unit]').value=item.unit||'шт.';
+  row.dataset.materialId=item.material_id||'';
+  refreshMaterialSuggestions(row);
  });
  $('drAddRow').addEventListener('click',()=>{
   const wrap=document.createElement('div');wrap.innerHTML=makeRow(rowsEl.children.length,'','');
@@ -546,7 +594,8 @@ async function openDocumentReview(documentId){
    unit:el.querySelector('[data-row-unit]').value.trim(),
    price:Number(el.querySelector('[data-row-price]').value),
    lead:Number(el.querySelector('[data-row-lead]').value||0),
-   availability:el.querySelector('[data-row-availability]').value.trim()
+   availability:el.querySelector('[data-row-availability]').value.trim(),
+   materialId:el.dataset.materialId||null
   }));
   if(!supplierId||!selectedRequest||delivery<0||!rows.length){toast('Выберите поставщика, закупку и проверьте доставку');return;}
   const seen=new Set();
@@ -571,7 +620,7 @@ async function openDocumentReview(documentId){
    const {data:newRequest,error:requestError}=await client.from('purchase_requests').insert({company_id:company.id,title,status:'collecting',created_by:userData.user.id,details:{source:'quote_document',document_id:doc.id}}).select('id').single();
    if(requestError){btn.disabled=false;btn.textContent='Подтвердить и добавить в сравнение';toast('Не удалось создать закупку: '+requestError.message);return;}
    requestId=newRequest.id;createdRequest=true;
-   const newItemRows=rows.map(row=>({company_id:company.id,request_id:requestId,description:row.description,specification:{text:row.spec},quantity:row.quantity,unit:row.unit}));
+   const newItemRows=rows.map(row=>({company_id:company.id,request_id:requestId,material_id:row.materialId||null,description:row.description,specification:{text:row.spec},quantity:row.quantity,unit:row.unit}));
    const {data:newItems,error:newItemsError}=await client.from('purchase_request_items').insert(newItemRows).select('id');
    if(newItemsError){await cleanupCreated();btn.disabled=false;btn.textContent='Подтвердить и добавить в сравнение';toast('Не удалось создать позиции закупки: '+newItemsError.message);return;}
    createdItemIds=(newItems||[]).map(x=>x.id);
@@ -579,7 +628,7 @@ async function openDocumentReview(documentId){
   }else{
    const rowsWithoutLink=rows.filter(row=>!row.itemId);
    if(rowsWithoutLink.length){
-    const newItemRows=rowsWithoutLink.map(row=>({company_id:company.id,request_id:requestId,description:row.description,specification:{text:row.spec},quantity:row.quantity,unit:row.unit}));
+    const newItemRows=rowsWithoutLink.map(row=>({company_id:company.id,request_id:requestId,material_id:row.materialId||null,description:row.description,specification:{text:row.spec},quantity:row.quantity,unit:row.unit}));
     const {data:newItems,error:newItemsError}=await client.from('purchase_request_items').insert(newItemRows).select('id');
     if(newItemsError){btn.disabled=false;btn.textContent='Подтвердить и добавить в сравнение';toast('Не удалось добавить позиции в закупку: '+newItemsError.message);return;}
     createdItemIds=(newItems||[]).map(x=>x.id);
