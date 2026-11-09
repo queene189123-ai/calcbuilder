@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.gmail-attachment-reader-v2]
 verify_jwt = false
+
+[functions.quote-document-parser]
+verify_jwt = true
