@@ -134,9 +134,9 @@
       if(out)out.textContent="Связываемся с Gmail…";
       const meta=window.snabproCurrentDraftMeta||{};
       const result=await call("send",{to,subject:subject||"Запрос коммерческого предложения",text:textBody,requestId:meta.requestId||null,subjectToken:meta.subjectToken||null});
-      if(out)out.textContent="Письмо успешно отправлено на "+to+".";
+      if(out)out.textContent=result.warning ? "Письмо отправлено на "+to+". "+result.warning : "Письмо успешно отправлено на "+to+".";
       if(meta.draftId){const drafts=JSON.parse(localStorage.getItem("sp_email_drafts")||"[]");const d=drafts.find(x=>x.id===meta.draftId);if(d)d.status="Отправлено";localStorage.setItem("sp_email_drafts",JSON.stringify(drafts));window.snabproMarkDraftSent?.(meta.draftId);window.snabproCurrentDraftMeta=null;}
-      if(typeof showToast==="function")showToast("Письмо отправлено.");
+      if(typeof showToast==="function")showToast(result.warning||"Письмо отправлено.");
     } catch(e) { if(out)out.textContent="Не удалось отправить: "+e.message; }
     finally {if(b){b.disabled=false;b.textContent="Отправить письмо";}}
   }
@@ -165,6 +165,7 @@
           const prices=result.extracted?.price_candidates||[];
           panel.textContent="Документ сохранён · "+result.extractionStatus+"\\nЦены-кандидаты: "+(prices.map(x=>x.amount+" "+x.currency).join(", ")||"не найдены")+"\\n"+(result.extractedText||result.extractionError||"Текст не извлечён");
           fileButton.textContent=result.extractionStatus==="review"?"Извлечено · проверить":"Сохранено";
+          if(typeof window.renderUploadedDocuments==="function") await window.renderUploadedDocuments();
         }catch(error){fileButton.disabled=false;fileButton.textContent="Повторить";showToast?.(error.message);}
         return;
       }
