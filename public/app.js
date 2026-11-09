@@ -311,10 +311,50 @@ function renderQuotes(){
  buildManagementReport();
 }
 function openQuoteImport(){
- modal('Добавить коммерческое предложение','<div class="notice">Введите данные из КП. Система посчитает итоговую стоимость с доставкой. Для реального внедрения распознавание документов будет автоматизировано.</div><div class="formgrid"><div class="field full"><label>Материал / позиция</label><select id="qiMaterial"><option>Труба нержавеющая Ø25 мм</option><option>Нержавеющая сталь AISI 304 · лист</option><option>АБС-пластик · лист 3 мм</option></select></div><div class="field"><label>Поставщик</label><input id="qiSupplier" placeholder="Название компании"></div><div class="field"><label>Цена за единицу, ₽</label><input id="qiPrice" type="number" min="0" placeholder="175"></div><div class="field"><label>Количество</label><input id="qiQty" type="number" min="1" value="300"></div><div class="field"><label>Доставка, ₽</label><input id="qiDelivery" type="number" min="0" value="0"></div><div class="field"><label>НДС</label><select id="qiVat"><option>НДС включён</option><option>Без НДС</option><option>НДС сверху</option><option>Не указано</option></select></div><div class="field"><label>Срок, дней</label><input id="qiLead" type="number" min="0" value="3"></div><div class="field full"><label>Характеристики / примечание</label><input id="qiSpec" placeholder="Марка, размеры, толщина, стандарт"></div></div><div class="modalfoot"><button class="btn" onclick="closeModal()">Отмена</button><button class="btn primary" id="modalSave">Сохранить КП</button></div>',()=>{
- const supplier=$('qiSupplier').value.trim(),price=Number($('qiPrice').value),qty=Number($('qiQty').value),delivery=Number($('qiDelivery').value||0);
- if(!supplier||!(price>0)||!(qty>0)){toast('Укажите поставщика, цену и количество');return false}
- const material=$('qiMaterial').value;quoteOffers.push({id:Date.now(),material,supplier,unitPrice:price,qty,delivery,vat:$('qiVat').value,lead:Number($('qiLead').value||0),unit:material.includes('Труба')?'м':'лист',spec:$('qiSpec').value||'Характеристики не подтверждены',status:'Добавлено вручную',source:'Ручной ввод'});localStorage.setItem('sp_quotes',JSON.stringify(quoteOffers));syncQuoteMaterialOptions();renderQuotes();renderPriceHistory();renderDashboard();toast('КП добавлено в сравнение');return true;
+ const html='<div class="notice">Добавьте полученное предложение вручную. В рабочем аккаунте КП, поставщик и закупка сохраняются в облачной базе предприятия.</div>'+
+ '<div class="formgrid">'+
+ '<div class="field full"><label>Материал / позиция</label><input id="qiMaterial" placeholder="Например, Лист Ст3 1500×3000×2 мм"></div>'+
+ '<div class="field"><label>Поставщик</label><input id="qiSupplier" placeholder="Название компании"></div>'+
+ '<div class="field"><label>Email поставщика (необязательно)</label><input id="qiEmail" type="email" placeholder="sales@company.ru"></div>'+
+ '<div class="field"><label>Цена за единицу</label><input id="qiPrice" type="number" min="0.0001" step="0.01" placeholder="175"></div>'+
+ '<div class="field"><label>Валюта</label><select id="qiCurrency"><option value="RUB">RUB · ₽</option><option value="USD">USD · $</option><option value="EUR">EUR · €</option></select></div>'+
+ '<div class="field"><label>Количество</label><input id="qiQty" type="number" min="0.0001" step="0.0001" value="1"></div>'+
+ '<div class="field"><label>Единица</label><input id="qiUnit" value="шт." placeholder="лист, кг, м, шт."></div>'+
+ '<div class="field"><label>Доставка</label><input id="qiDelivery" type="number" min="0" step="0.01" value="0"></div>'+
+ '<div class="field"><label>Срок, дней</label><input id="qiLead" type="number" min="0" step="1" value="3"></div>'+
+ '<div class="field"><label>НДС</label><select id="qiVat"><option value="">Не указано</option><option value="yes">НДС включён</option><option value="no">Без НДС</option><option value="top">НДС сверху</option></select></div>'+
+ '<div class="field full"><label>Характеристики / примечание</label><input id="qiSpec" placeholder="Марка, размеры, толщина, стандарт"></div>'+
+ '</div><div class="modalfoot"><button class="btn" type="button" onclick="closeModal()">Отмена</button><button class="btn primary" type="button" id="modalSave">Сохранить КП</button></div>';
+ modal('Добавить коммерческое предложение',html,()=>false);
+ $('modalSave').addEventListener('click',async()=>{
+  const supplier=$('qiSupplier').value.trim(),email=$('qiEmail').value.trim(),material=$('qiMaterial').value.trim(),spec=$('qiSpec').value.trim();
+  const price=Number($('qiPrice').value),qty=Number($('qiQty').value),delivery=Number($('qiDelivery').value||0),lead=Number($('qiLead').value||0);
+  const unit=$('qiUnit').value.trim(),currency=$('qiCurrency').value,vat=$('qiVat').value;
+  if(!supplier||!material||!(price>0)||!(qty>0)||!unit||delivery<0||lead<0||!['RUB','USD','EUR'].includes(currency)){
+   toast('Проверьте поставщика, материал, количество, единицу и цену');return;
+  }
+  if(email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){toast('Проверьте email поставщика');return;}
+  const btn=$('modalSave');btn.disabled=true;btn.textContent='Сохраняем…';
+  const client=window.snabproClient,company=window.snabproGetCompany?.();
+  if(client&&company?.id){
+   if(!window.snabproWorkspaceReady){btn.disabled=false;btn.textContent='Сохранить КП';toast('Дождитесь загрузки данных предприятия');return;}
+   try{
+    const {data,error}=await client.rpc('create_manual_quote',{
+     p_company_id:company.id,p_supplier_name:supplier,p_supplier_email:email||null,
+     p_material:material,p_specification:spec,p_quantity:qty,p_unit:unit,
+     p_unit_price:price,p_delivery_cost:delivery,p_currency:currency,p_vat:vat,
+     p_lead_time_days:lead
+    });
+    if(error)throw error;
+    closeModal();
+    await window.snabproRefreshQuotes?.();
+    toast('КП сохранено в базе предприятия и добавлено в сравнение');
+   }catch(error){btn.disabled=false;btn.textContent='Сохранить КП';toast('Не удалось сохранить КП: '+(error.message||'ошибка'));}
+   return;
+  }
+  quoteOffers.push({id:Date.now(),material,supplier,unitPrice:price,qty,delivery,vat:vat==='yes'?'НДС включён':vat==='no'?'Без НДС':vat==='top'?'НДС сверху':'Не указано',lead,unit,spec:spec||'Характеристики не подтверждены',status:'Добавлено вручную',source:'Ручной ввод',currency,createdAt:new Date().toISOString()});
+  localStorage.setItem('sp_quotes',JSON.stringify(quoteOffers));syncQuoteMaterialOptions();renderQuotes();renderPriceHistory();renderDashboard();
+  closeModal();toast('КП добавлено в локальное сравнение');
  });
 }
 let previewDrafts=[];
