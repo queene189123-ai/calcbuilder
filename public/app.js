@@ -481,19 +481,20 @@ async function openDocumentReview(documentId){
   const vatTop=/ндс\s+сверху|плюс\s+ндс|\+\s*ндс/i.test(ex.vat||textPreview);
   const vatNo=!vatTop&&/без\s*ндс/i.test(ex.vat||textPreview);
   const vatYes=!vatTop&&!vatNo&&/ндс/i.test(ex.vat||'');
-  const item=items.find(x=>x.id===itemId);
-  const rowItems=items.filter(x=>x.request_id===initialRequest);
-  return '<div class="dr-quote-row" data-quote-row style="border:1px solid var(--line,#ddd);border-radius:10px;padding:12px;margin:10px 0">'+
-   '<div class="field full"><label>Связать с позицией существующей закупки (необязательно)</label><select data-row-item><option value="">Без привязки — создать позицию из строки КП</option>'+itemOptions(rowItems,itemId)+'</select></div>'+
-   '<div class="formgrid"><div class="field full"><label>Материал / наименование позиции</label><input data-row-description value="'+eh(item?.description||parsed?.description||'')+'" placeholder="Например, Ст3сп лист 1500×6000"></div>'+
-   '<div class="field full"><label>Характеристики</label><input data-row-spec value="'+eh(item?.specification?.text||'')+'" placeholder="Марка, толщина, размеры, стандарт"></div>'+
-   '<div class="field"><label>Количество</label><input data-row-quantity type="number" min="0.0001" step="0.0001" value="'+eh(item?.quantity??parsed?.quantity??'')+'" placeholder="20"></div>'+
-   '<div class="field"><label>Единица</label><input data-row-unit value="'+eh(item?.unit||parsed?.unit||'лист')+'" placeholder="лист, кг, м, шт."></div>'+
-   '<div class="field"><label>Цена за единицу, ₽</label><input data-row-price type="number" min="0.0001" step="0.01" value="'+eh(priceValue)+'" placeholder="Введите цену"></div>'+
-   '<div class="field"><label>Срок, дней</label><input data-row-lead type="number" min="0" value="'+eh(ex.lead_time_days||'')+'"></div>'+
-   '<div class="field full"><label>Наличие / комментарий</label><input data-row-availability value="'+eh(ex.availability||'')+'" placeholder="Например, в наличии"></div></div>'+
-   '<button class="btn" type="button" data-remove-quote-row>Удалить позицию</button></div>';
- };
+  const makeRow=(index,itemId='',priceValue='',parsed=null)=>{
+   const item=items.find(x=>x.id===itemId);
+   const rowItems=items.filter(x=>x.request_id===initialRequest);
+   return '<div class="dr-quote-row" data-quote-row style="border:1px solid var(--line,#ddd);border-radius:10px;padding:12px;margin:10px 0">'+
+    '<div class="field full"><label>Связать с позицией существующей закупки (необязательно)</label><select data-row-item><option value="">Без привязки — создать позицию из строки КП</option>'+itemOptions(rowItems,itemId)+'</select></div>'+
+    '<div class="formgrid"><div class="field full"><label>Материал / наименование позиции</label><input data-row-description value="'+eh(item?.description||parsed?.description||'')+'" placeholder="Например, Ст3сп лист 1500×6000"></div>'+
+    '<div class="field full"><label>Характеристики</label><input data-row-spec value="'+eh(item?.specification?.text||'')+'" placeholder="Марка, толщина, размеры, стандарт"></div>'+
+    '<div class="field"><label>Количество</label><input data-row-quantity type="number" min="0.0001" step="0.0001" value="'+eh(item?.quantity??parsed?.quantity??'')+'" placeholder="20"></div>'+
+    '<div class="field"><label>Единица</label><input data-row-unit value="'+eh(item?.unit||parsed?.unit||'лист')+'" placeholder="лист, кг, м, шт."></div>'+
+    '<div class="field"><label>Цена за единицу, ₽</label><input data-row-price type="number" min="0.0001" step="0.01" value="'+eh(priceValue)+'" placeholder="Введите цену"></div>'+
+    '<div class="field"><label>Срок, дней</label><input data-row-lead type="number" min="0" value="'+eh(ex.lead_time_days||'')+'"></div>'+
+    '<div class="field full"><label>Наличие / комментарий</label><input data-row-availability value="'+eh(ex.availability||'')+'" placeholder="Например, в наличии"></div></div>'+
+    '<button class="btn" type="button" data-remove-quote-row>Удалить позицию</button></div>';
+  };
  const rowCount=initialRequest===createRequestValue?Math.max(1,Math.min(12,detectedRows||priceMatches.length||1)):Math.max(1,requestItems.length);
  const initialRows=Array.from({length:rowCount},(_,i)=>makeRow(i,initialRequest===createRequestValue?'':requestItems[i]?.id||'',parsedLineItems[i]?.price||priceMatches[i]||'',parsedLineItems[i]||null)).join('');
  modal('Проверка коммерческого предложения',
