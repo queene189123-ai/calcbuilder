@@ -595,8 +595,12 @@ async function openDocumentReview(documentId){
     if(diff>0.02)messages.push('Сумма в документе '+quotedTotal.toLocaleString('ru-RU')+' не совпадает с количеством × ценой ('+calculated.toLocaleString('ru-RU')+'). Проверьте цену и количество.');
     else messages.push('Сумма проверена: '+quotedTotal.toLocaleString('ru-RU'));
    }else if(quotedTotal>0)messages.push('Сумма в документе: '+quotedTotal.toLocaleString('ru-RU')+'. Заполните количество и цену для проверки.');
-   if(linked&&quantity>0&&Number(linked.quantity)>0&&Math.abs(quantity-Number(linked.quantity))>0.0001){
-    messages.push('В закупке запрошено '+linked.quantity+' '+(linked.unit||'')+', в КП указано '+quantity+' '+(row.querySelector('[data-row-unit]').value||'')+'.');
+   if(linked){
+    const quoteUnit=String(row.querySelector('[data-row-unit]').value||'').toLowerCase().replace(/\\./g,'');
+    const requestedUnit=String(linked.unit||'').toLowerCase().replace(/\\./g,'');
+    if(quantity>0&&Number(linked.quantity)>0&&Math.abs(quantity-Number(linked.quantity))>0.0001||quoteUnit&&requestedUnit&&quoteUnit!==requestedUnit){
+     messages.push('В закупке запрошено '+linked.quantity+' '+(linked.unit||'')+', в КП указано '+quantity+' '+(row.querySelector('[data-row-unit]').value||'')+'. Проверьте объём и единицу измерения.');
+    }
    }
    const hint=row.querySelector('[data-price-check]');
    if(hint){hint.textContent=messages.join(' ' )||'Сумма и количество: явных расхождений не выявлено.';hint.style.color=messages.some(x=>x.includes('не совпадает')||x.includes('запрошено'))?'var(--danger,#b45309)':'';}
