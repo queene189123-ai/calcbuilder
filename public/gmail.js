@@ -197,11 +197,37 @@
           if(!panel){panel=document.createElement("pre");panel.dataset.fileResult="1";panel.style.cssText="white-space:pre-wrap;overflow-wrap:anywhere;max-height:240px;overflow:auto;background:#f5f7fc;padding:10px;border-radius:8px;margin-top:8px;font-size:11px";fileButton.parentElement.appendChild(panel);}
           const extracted=result.extracted||{},prices=extracted.price_candidates||[],items=extracted.line_items||[];
           const safe=value=>escapeHtml(value==null?"":String(value));
+          const requestSelect=card.querySelector("[data-q-item]");
+          const requestOptions=requestSelect?Array.from(requestSelect.options).map(o=>({id:o.value,label:o.textContent||""})):[];
+          const normText=v=>String(v||"").toLowerCase().replace(/ё/g,"е").replace(/[^a-zа-я0-9]+/g," ").trim();
+          const importable=items.slice(0,80).filter(x=>Number(x.unit_price)>0);
+          const lineRows=importable.map((item,index)=>{
+            const description=normText(item.description);
+            const exact=requestOptions.find(o=>normText(o.label.split(" · ")[0])===description);
+            const opts=requestOptions.map(o=>'<option value="'+safe(o.id)+'" '+(exact?.id===o.id?"selected":"")+'>'+safe(o.label)+'</option>').join("");
+            return '<tr data-import-line="'+index+'"><td style="padding:6px;border-bottom:1px solid #e7ebf2;min-width:150px">'+safe(item.description)+'<div style="color:#667085">'+safe(item.specification?.text||item.specification||"")+'</div></td><td style="padding:6px;border-bottom:1px solid #e7ebf2"><select data-import-item style="max-width:190px;width:100%"><option value="">Не сопоставлять</option>'+opts+'</select></td><td style="padding:6px;border-bottom:1px solid #e7ebf2"><input data-import-qty type="number" min="0.0001" step="any" value="'+safe(item.quantity??"")+'" style="width:78px"></td><td style="padding:6px;border-bottom:1px solid #e7ebf2"><input data-import-price type="number" min="0.0001" step="any" value="'+safe(item.unit_price??"")+'" style="width:90px"></td></tr>';
+          }).join("");
+          const importPanel=result.documentId&&requestOptions.length&&importable.length?'<div style="margin-top:10px;padding:10px;border:1px solid #cbd7f0;border-radius:8px"><b>Перенести позиции в сравнение КП</b><div style="font-size:11px;color:#667085;margin:4px 0 8px">Проверьте сопоставление каждой строки. Автоматически выбраны только точные совпадения названий. Остальные оставлены без привязки.</div><div style="overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr><th style="text-align:left">Из КП</th><th>Позиция закупки</th><th>Кол-во</th><th>Цена/ед.</th></tr></thead><tbody>'+lineRows+'</tbody></table></div><button type="button" data-import-document="'+safe(result.documentId)+'" data-import-message="'+safe(fileButton.dataset.processFile)+'" style="width:100%;padding:9px;margin-top:9px;background:#315eea;color:white;border:0;border-radius:7px">Добавить выбранные позиции в сравнение</button></div>':"";
           const itemTable=items.length?'<div style="overflow:auto;margin-top:8px"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr><th style="text-align:left;padding:5px;border-bottom:1px solid #dbe1ec">Позиция</th><th style="padding:5px;border-bottom:1px solid #dbe1ec">Кол-во</th><th style="padding:5px;border-bottom:1px solid #dbe1ec">Ед.</th><th style="padding:5px;border-bottom:1px solid #dbe1ec">Цена</th><th style="padding:5px;border-bottom:1px solid #dbe1ec">Сумма</th></tr></thead><tbody>'+items.slice(0,80).map(item=>'<tr><td style="padding:5px;border-bottom:1px solid #e7ebf2">'+safe(item.description)+'<div style="color:#667085">'+safe(item.specification?.text||item.specification||"")+'</div></td><td style="text-align:right;padding:5px;border-bottom:1px solid #e7ebf2">'+safe(item.quantity)+'</td><td style="padding:5px;border-bottom:1px solid #e7ebf2">'+safe(item.unit)+'</td><td style="text-align:right;padding:5px;border-bottom:1px solid #e7ebf2">'+safe(item.unit_price)+'</td><td style="text-align:right;padding:5px;border-bottom:1px solid #e7ebf2">'+safe(item.total)+'</td></tr>').join("")+'</tbody></table></div>':'<div style="margin-top:6px;color:#667085">Табличные позиции не распознаны. Ниже доступен извлечённый текст для проверки.</div>';
-          panel.innerHTML='<b>Документ сохранён · '+safe(result.extractionStatus)+'</b><div style="margin-top:5px">Цены-кандидаты: '+safe(prices.map(x=>x.amount+" "+x.currency).join(", ")||"не найдены")+'</div><div style="margin-top:5px">Позиций извлечено: '+items.length+'</div>'+itemTable+(result.extractionError?'<div style="color:#b42318;margin-top:6px">'+safe(result.extractionError)+'</div>':'')+'<details style="margin-top:8px"><summary style="cursor:pointer">Показать исходный текст</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:180px;overflow:auto">'+safe(result.extractedText||"Текст не извлечён")+'</pre></details>';
-          fileButton.textContent=result.extractionStatus==="review"?"Извлечено · проверить":result.extractionStatus==="failed"?"Не извлечено · открыть ошибку":"Сохранено";
+          panel.innerHTML='<b>Документ сохранён · '+safe(result.extractionStatus)+'</b><div style="margin-top:5px">Цены-кандидаты: '+safe(prices.map(x=>x.amount+" "+x.currency).join(", ")||"не найдены")+'</div><div style="margin-top:5px">Позиций извлечено: '+items.length+'</div>'+itemTable+importPanel+(result.extractionError?'<div style="color:#b42318;margin-top:6px">'+safe(result.extractionError)+'</div>':'')+'<details style="margin-top:8px"><summary style="cursor:pointer">Показать исходный текст</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:180px;overflow:auto">'+safe(result.extractedText||"Текст не извлечён")+'</pre></details>';
           if(typeof window.renderUploadedDocuments==="function") await window.renderUploadedDocuments();
         }catch(error){fileButton.disabled=false;fileButton.textContent="Повторить";showToast?.(error.message);}
+        return;
+      }
+      const importButton=ev.target.closest("[data-import-document]");
+      if(importButton){
+        const panel=importButton.closest("[data-file-result]"),card=importButton.closest("article");
+        const rows=Array.from(panel.querySelectorAll("[data-import-line]")).map(row=>({requestItemId:row.querySelector("[data-import-item]")?.value||"",quantity:Number(row.querySelector("[data-import-qty]")?.value),unitPrice:Number(row.querySelector("[data-import-price]")?.value)})).filter(x=>x.requestItemId);
+        if(!rows.length){showToast?.("Сопоставьте хотя бы одну позицию с закупкой.");return;}
+        if(rows.some(x=>!Number.isFinite(x.quantity)||x.quantity<=0||!Number.isFinite(x.unitPrice)||x.unitPrice<=0)){showToast?.("Проверьте количество и цену в выбранных строках.");return;}
+        importButton.disabled=true;importButton.textContent="Добавляем позиции…";
+        try{
+          const result=await call("import_document_lines",{documentId:importButton.dataset.importDocument,lines:rows,currency:card.querySelector("[data-q-currency]")?.value||"RUB",vatLabel:card.querySelector("[data-q-vat]")?.value||"",deliveryCost:card.querySelector("[data-q-delivery]")?.value||0,leadTimeDays:card.querySelector("[data-q-lead]")?.value||null});
+          importButton.textContent=result.alreadyImported?"Уже было добавлено":"Добавлено позиций: "+result.saved;
+          importButton.style.background="#18845b";
+          await window.snabproRefreshQuotes?.();
+          showToast?.(result.alreadyImported?"Этот документ уже был импортирован.":"В сравнение добавлено позиций: "+result.saved);
+        }catch(error){importButton.disabled=false;importButton.textContent="Добавить выбранные позиции в сравнение";showToast?.(error.message);}
         return;
       }
       const button=ev.target.closest("[data-save-quote]");
