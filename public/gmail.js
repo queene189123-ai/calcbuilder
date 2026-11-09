@@ -80,6 +80,7 @@
       if(b){b.disabled=true;b.textContent="Синхронизируем…";}
       if(out)out.textContent="Загружаем письма, автоматически собранные системой…";
       const d=await call("saved_inbox"), items=d.messages||[];
+      items.forEach(m=>{if(m.requestId&&m.fromEmail)window.snabproMarkReplyReceived?.(m.requestId,m.fromEmail);});
       const matched=items.filter(m=>m.supplierName).length, linked=items.filter(m=>m.requestId).length;
       out.innerHTML='<div style="font-size:11px;color:#78849a;margin:8px 0">Синхронизировано писем: '+items.length+' · распознано поставщиков: '+matched+' · привязано к заявкам: '+linked+'</div>'+
         (items.map(renderInboxMessage).join("")||"Новых входящих писем за последние 30 дней не найдено.");
