@@ -464,7 +464,7 @@ window.snabproLoadWorkspace=async function(company){
    client.from('suppliers').select('*').eq('company_id',company.id).order('created_at',{ascending:true}),
    client.from('purchase_requests').select('*').eq('company_id',company.id).order('created_at',{ascending:false}),
    client.from('quote_documents').select('id,original_filename,extraction_status,created_at').eq('company_id',company.id).order('created_at',{ascending:false}),
-   client.from('purchase_request_suppliers').select('request_id,status,supplier_id,supplier_email,subject_token,gmail_message_id,sent_at,email_subject,email_body,drafted_at').eq('company_id',company.id),
+   client.from('purchase_request_suppliers').select('request_id,status,supplier_id,supplier_email,subject_token,gmail_message_id,sent_at,email_subject,email_body,drafted_at').eq('company_id',company.id).order('drafted_at',{ascending:true}),
    client.from('material_folders').select('id,name,sort_order').eq('company_id',company.id).order('sort_order').order('name'),
    client.from('purchase_request_items').select('id,request_id,material_id,description,specification,quantity,unit').eq('company_id',company.id).order('created_at',{ascending:true})
   ]);
@@ -479,7 +479,7 @@ window.snabproLoadWorkspace=async function(company){
   if(!materialFolders.length)materialFolders=['Металл','Пластик','Трубы','Комплектующие','Изоляция'];
   suppliers=(s.data||[]).map((x,i)=>({id:i+1,dbId:x.id,name:x.name,email:x.email||'',contact:x.contact||x.phone||'',region:x.region||'',cats:x.categories||[],rating:x.rating||'—',lead:x.lead_time||'Не указан'}));
   purchases=(p.data||[]).map((x,i)=>{
-   const linked=linkStatuses.get(x.id)||[],requestItems=(itemsByRequest.get(x.id)||[]).map((item,j)=>({id:j+1,dbId:item.id,materialDbId:item.material_id,name:item.description,spec:item.specification?.text||'',qty:Number(item.quantity),unit:item.unit,cat:item.specification?.category||''}));
+   const linked=linkStatuses.get(x.id)||[],requestItems=(itemsByRequest.get(x.id)||[]).map((item,j)=>({id:materials.find(m=>m.dbId===item.material_id)?.id||null,dbId:item.id,materialDbId:item.material_id,name:item.description,spec:item.specification?.text||'',qty:Number(item.quantity),unit:item.unit,cat:item.specification?.category||''}));
    return {id:i+1,dbId:x.id,name:x.title,items:x.details?.items||requestItems.map(v=>v.name+' · '+v.qty+' '+v.unit).join('; '),vendors:linked.length||x.details?.vendors||0,replies:linked.filter(v=>v==='sent').length||x.details?.replies||0,status:x.status==='completed'?'Завершена':x.status==='cancelled'?'Отменена':(linked.length&&linked.every(v=>v==='sent')?'Ожидаем ответы':linked.length?'Черновики готовы':'Черновик'),date:x.details?.date||new Date(x.created_at).toLocaleDateString('ru-RU'),requestItems,draftBatch:x.id};
   });
   emailDrafts=(links.data||[]).map(link=>{
