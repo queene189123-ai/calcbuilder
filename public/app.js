@@ -604,7 +604,7 @@ async function openDocumentReview(documentId){
 function renderPriceHistory(){
  const el=$('priceHistoryRows');if(!el)return;
  const rows=(quoteOffers||[]).filter(q=>q.createdAt&&Number.isFinite(Date.parse(q.createdAt))).sort((a,b)=>Date.parse(b.createdAt)-Date.parse(a.createdAt)).slice(0,100);
- el.innerHTML=rows.length?rows.map(q=>'<tr><td>'+new Date(q.createdAt).toLocaleDateString('ru-RU')+'</td><td>'+eh(q.material)+'</td><td>'+eh(q.supplier)+'</td><td>'+money(q.unitPrice,q.currency)+' / '+eh(q.unit)+'</td><td>'+money(q.delivery,q.currency)+'</td><td class="strong">'+money(q.qty*q.unitPrice+q.delivery,q.currency)+'</td></tr>').join(''):'<tr><td colspan="6" class="empty">История появится после сохранения первых реальных коммерческих предложений.</td></tr>';
+ el.innerHTML=rows.length?rows.map(q=>{const vat=q.vat||'Не указано',taxKnown=['НДС включён','Без НДС'].includes(vat);return '<tr><td>'+new Date(q.createdAt).toLocaleDateString('ru-RU')+'</td><td>'+eh(q.material)+'</td><td>'+eh(q.supplier)+'</td><td>'+money(q.unitPrice,q.currency)+' / '+eh(q.unit)+'</td><td>'+money(q.delivery,q.currency)+'</td><td>'+eh(vat)+'</td><td class="strong">'+(taxKnown?money(q.qty*q.unitPrice+q.delivery,q.currency):'Не рассчитано')+'</td></tr>'}).join(''):'<tr><td colspan="7" class="empty">История появится после сохранения первых реальных коммерческих предложений.</td></tr>';
 }
 function buildManagementReport(){
  const all=quoteOffers,by={};all.forEach(q=>{const currency=q.currency||'RUB',key=[q.material,currency,q.qty,q.unit,q.vat||'Не указано'].join('||');(by[key]??=[]).push({...q,currency,total:q.qty*q.unitPrice+q.delivery})});
