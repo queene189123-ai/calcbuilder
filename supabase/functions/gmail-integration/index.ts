@@ -204,7 +204,7 @@ Deno.serve(async (req) => {
         }
         throw quoteError;
       }
-      const quoteItems=valid.map(({item,quantity,unitPrice,sourceLine})=>({company_id:companyId,quote_id:quote.id,request_item_id:item.id,description:item.description,specification:{...(item.specification||{}),supplier_description:String(sourceLine.description||"").slice(0,500),supplier_specification:sourceLine.specification||{},vat_label:vatLabel},quantity,unit:String(sourceLine.unit||item.unit||"").slice(0,40)||null,unit_price:unitPrice,vat_included:vatLabel==="yes"?true:vatLabel==="no"||vatLabel==="top"?false:null,confidence:0.75,source_excerpt:String(sourceLine.source_excerpt||"").slice(0,1000)||null}));
+      const quoteItems=valid.map(({item,quantity,unitPrice,sourceLine})=>{const baseSpec=item.specification&&typeof item.specification==="object"&&!Array.isArray(item.specification)?item.specification:{text:String(item.specification||"")};return {company_id:companyId,quote_id:quote.id,request_item_id:item.id,description:item.description,specification:{...baseSpec,supplier_description:String(sourceLine.description||"").slice(0,500),supplier_specification:sourceLine.specification||{},vat_label:vatLabel},quantity,unit:String(sourceLine.unit||item.unit||"").slice(0,40)||null,unit_price:unitPrice,vat_included:vatLabel==="yes"?true:vatLabel==="no"||vatLabel==="top"?false:null,confidence:0.75,source_excerpt:String(sourceLine.source_excerpt||"").slice(0,1000)||null};});
       const {error:itemsError}=await admin.from("quote_items").insert(quoteItems);
       if(itemsError){await admin.from("supplier_quotes").delete().eq("company_id",companyId).eq("id",quote.id);throw itemsError;}
       return json({ok:true,quoteId:quote.id,saved:quoteItems.length});
