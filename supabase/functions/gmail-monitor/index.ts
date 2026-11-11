@@ -111,7 +111,7 @@ async function syncCompany(connection: any) {
     ...(suppliers || []).map((s: any) => String(s.email || "")),
     ...(links || []).map((x: any) => String(x.supplier_email || ""))
   ])].map((value: string) => value.trim().toLowerCase())
-    .filter((value: string) => /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(value));
+    .filter((value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value));
   const subjectTokens = [...new Set((links || []).map((x: any) => String(x.subject_token || "")))]
     .filter((value: string) => /^SP-[A-Z0-9-]{3,80}$/i.test(value));
   const searchTerms = [
