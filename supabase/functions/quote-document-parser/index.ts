@@ -85,6 +85,25 @@ function parseLineItems(text: string) {
       break;
     }
   }
+  if (items.length) return items;
+
+  // Some PDFs flatten the whole table into one text line instead of preserving
+  // cell separators. Recover common numbered quote rows from that representation.
+  const flatRow = /(?:^|\s)(\d{1,3})\s+(.+?)\s+(\d+(?:[.,]\d+)?)\s+(шт\.?|штук|лист(?:а|ов)?|м|метр(?:а|ов)?|кг|т|упак\.?)\s+([\d\s]+[,.]\d{2})\s+([\d\s]+[,.]\d{2})(?=\s+\d{1,3}\s+|\s*(?:Стоимость товаров|ИТОГО)|$)/gi;
+  for (const match of text.matchAll(flatRow)) {
+    const description = match[2].trim();
+    const quantity = numberValue(match[3]);
+    const unitPrice = numberValue(match[5]);
+    const total = numberValue(match[6]);
+    if (!description || quantity === null || unitPrice === null) continue;
+    items.push({
+      description: description.slice(0, 500), specification: {},
+      quantity, unit: match[4].slice(0, 40), unit_price: unitPrice, total,
+      currency: detectCurrency(match[0]) || "RUB",
+      confidence: 0.65, source_excerpt: match[0].trim().slice(0, 1000)
+    });
+    if (items.length >= 150) break;
+  }
   return items;
 }
 function parseText(text: string) {
