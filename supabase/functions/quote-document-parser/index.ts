@@ -179,7 +179,7 @@ async function extractFile(bytes: Uint8Array, filename: string, mime: string) {
     return lines.join("\n").slice(0, 50000);
   }
   if (ext === "pdf" || mime === "application/pdf") {
-    const pdf = await getDocument({ data: bytes, disableWorker: true, isEvalSupported: false }).promise;
+    const pdf = await getDocument({ data: bytes, disableWorker: true, isEvalSupported: false } as any).promise;
     const lines: string[] = [];
     for (let pageNo = 1; pageNo <= Math.min(pdf.numPages, 60); pageNo++) {
       const page = await pdf.getPage(pageNo);
