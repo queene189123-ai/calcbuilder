@@ -172,7 +172,7 @@ async function syncCompany(connection: any) {
     }
 
     const subject = header(headers, "Subject");
-    const tokenMatch = subject.match(/\\[(SP-[A-Z0-9-]+)\\]/i);
+    const tokenMatch = subject.match(/\[(SP-[A-Z0-9-]+)\]/i);
     const subjectToken = tokenMatch?.[1] || null;
     const requestLink = subjectToken ? (links || []).find((x: any) =>
       String(x.subject_token).toLowerCase() === subjectToken.toLowerCase() &&
@@ -200,7 +200,7 @@ async function syncCompany(connection: any) {
     }
     const texts: string[] = [], attachments: any[] = [];
     collectParts(message.payload, texts, attachments);
-    const bodyText = (texts.join("\\n\\n").slice(0, 30000) || message.snippet || "");
+    const bodyText = (texts.join("\n\n").slice(0, 30000) || message.snippet || "");
     const extracted = parseSupplierReply(bodyText);
     const receivedAt = message.internalDate ? new Date(Number(message.internalDate)).toISOString() : null;
     const row = {
