@@ -43,6 +43,8 @@ function detectCurrency(value: string) {
 function parseLineItems(text: string) {
   const rows = text.split(/\r?\n/).map(line => line.split(/\s*\|\s*/).map(cell => cell.trim())).filter(row => row.some(Boolean));
   const items: any[] = [];
+  // Currency is often printed once in the document header, not on every row.
+  const documentCurrency = detectCurrency(text) || "RUB";
   const aliases: Record<string, string[]> = {
     description: ["наименование", "товар", "материал", "позиция", "номенклатура", "описание", "product", "item", "name"],
     specification: ["характеристика", "спецификация", "марка", "размер", "стандарт", "параметры", "grade", "specification"],
@@ -78,7 +80,7 @@ function parseLineItems(text: string) {
           specification: spec ? { text: spec.slice(0, 500) } : {},
           quantity, unit: unit.slice(0, 40) || null,
           unit_price: unitPrice, total,
-          currency: detectCurrency(row.join(" ")) || "RUB",
+          currency: detectCurrency(row.join(" ")) || documentCurrency,
           confidence: 0.75, source_excerpt: row.join(" | ").slice(0, 1000)
         });
       }
@@ -99,7 +101,7 @@ function parseLineItems(text: string) {
     items.push({
       description: description.slice(0, 500), specification: {},
       quantity, unit: match[4].slice(0, 40), unit_price: unitPrice, total,
-      currency: detectCurrency(match[0]) || "RUB",
+      currency: detectCurrency(match[0]) || documentCurrency,
       confidence: 0.65, source_excerpt: match[0].trim().slice(0, 1000)
     });
     if (items.length >= 150) break;
