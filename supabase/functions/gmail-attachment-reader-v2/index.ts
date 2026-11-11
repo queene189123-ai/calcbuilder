@@ -39,10 +39,12 @@ function num(v:string){const s=String(v||"").replace(/[^0-9,.-]/g,"").replace(/\
 function currency(v:string){return /₽|руб|RUB/i.test(v)?"RUB":/USD|\$/i.test(v)?"USD":/EUR|€/i.test(v)?"EUR":null;}
 function parse(t:string){
  const rows=t.split(/\r?\n/).map(line=>line.split(/\s*\|\s*/).map(x=>x.trim())).filter(x=>x.some(Boolean));
+ // Supplier quotes often declare currency only in the document heading.
+ const documentCurrency=currency(t)||"RUB";
  const aliases:Record<string,string[]>={description:["наименование","товар","материал","позиция","номенклатура","описание","product","item","name"],specification:["характеристика","спецификация","марка","размер","стандарт","параметры","grade","specification"],quantity:["количество","кол-во","кол.","qty","quantity"],unit:["ед.","ед изм","единица","единица измерения","unit"],unit_price:["цена","цена за","стоимость за","price","unit price"],total:["сумма","итого","общая стоимость","total","amount"]};
  const norm=(v:string)=>v.toLowerCase().replace(/ё/g,"е").replace(/[^a-zа-я0-9]+/g," ").trim();let line_items:any[]=[];
  for(let i=0;i<Math.min(rows.length,80);i++){const cells=rows[i].map(norm),h:Record<string,number>={};for(const [k,names] of Object.entries(aliases)){const ix=cells.findIndex(v=>names.some(n=>v===norm(n)||v.includes(norm(n))));if(ix>=0)h[k]=ix;}if(h.description===undefined||(h.quantity===undefined&&h.unit_price===undefined&&h.total===undefined))continue;
-  for(let j=i+1;j<rows.length&&line_items.length<150;j++){const r=rows[j],get=(k:string)=>h[k]===undefined?"":r[h[k]]||"",description=get("description");if(!description||/^(итого|всего|ндс|сумма к оплате|подпись)/i.test(description))continue;const quantity=num(get("quantity")),unit_price=num(get("unit_price")),total=num(get("total"));if(quantity===null&&unit_price===null&&total===null)continue;const spec=get("specification");line_items.push({description:description.slice(0,500),specification:spec?{text:spec.slice(0,500)}:{},quantity,unit:get("unit").slice(0,40)||null,unit_price,total,currency:currency(r.join(" "))||"RUB",confidence:0.75,source_excerpt:r.join(" | ").slice(0,1000)});}
+  for(let j=i+1;j<rows.length&&line_items.length<150;j++){const r=rows[j],get=(k:string)=>h[k]===undefined?"":r[h[k]]||"",description=get("description");if(!description||/^(итого|всего|ндс|сумма к оплате|подпись)/i.test(description))continue;const quantity=num(get("quantity")),unit_price=num(get("unit_price")),total=num(get("total"));if(quantity===null&&unit_price===null&&total===null)continue;const spec=get("specification");line_items.push({description:description.slice(0,500),specification:spec?{text:spec.slice(0,500)}:{},quantity,unit:get("unit").slice(0,40)||null,unit_price,total,currency:currency(r.join(" "))||documentCurrency,confidence:0.75,source_excerpt:r.join(" | ").slice(0,1000)});}
   break;
  }
  if (!line_items.length) {
@@ -51,7 +53,7 @@ function parse(t:string){
   for(const match of t.matchAll(flatRow)){
    const description=match[2].trim(),quantity=num(match[3]),unit_price=num(match[5]),total=num(match[6]);
    if(!description||quantity===null||unit_price===null)continue;
-   line_items.push({description:description.slice(0,500),specification:{},quantity,unit:match[4].slice(0,40),unit_price,total,currency:currency(match[0])||"RUB",confidence:0.65,source_excerpt:match[0].trim().slice(0,1000)});
+   line_items.push({description:description.slice(0,500),specification:{},quantity,unit:match[4].slice(0,40),unit_price,total,currency:currency(match[0])||documentCurrency,confidence:0.65,source_excerpt:match[0].trim().slice(0,1000)});
    if(line_items.length>=150)break;
   }
  }
