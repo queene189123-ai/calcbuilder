@@ -1,6 +1,8 @@
 name: Validate SnabPro changes
 
 on:
+  push:
+    branches: [fix/gmail-monitor-relevant-senders]
   pull_request:
     branches: [main]
     paths:
