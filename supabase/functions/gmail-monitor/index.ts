@@ -237,7 +237,6 @@ async function syncCompany(connection: any) {
   await recordRun(companyId, failures.length ? "error" : "ok", saved, lastError);
   return { companyId, discovered: messageIds.length, saved, skipped, failed: failures.length };
 }
-}
 
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return new Response("Method not allowed", { status: 405 });
