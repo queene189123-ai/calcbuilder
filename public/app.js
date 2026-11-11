@@ -523,7 +523,7 @@ async function openDocumentReview(documentId){
  const catalogOptions=(matches,selected='')=>'<option value="">Не сопоставлять со справочником</option>'+matches.map(x=>'<option value="'+eh(x.material.id)+'" '+(x.material.id===selected?'selected':'')+'>'+eh(x.material.name)+' · '+Math.round(x.score*100)+'%</option>').join('');
  const supplierOptions=suppliersList.map(x=>'<option value="'+eh(x.id)+'" '+(x.id===doc.supplier_id?'selected':'')+'>'+eh(x.name)+'</option>').join('');
  const requestOptions='<option value="'+createRequestValue+'" '+(initialRequest===createRequestValue?'selected':'')+'>＋ Создать новую закупку из этого КП</option>'+requests.map(x=>'<option value="'+eh(x.id)+'" '+(x.id===initialRequest?'selected':'')+'>'+eh(x.title)+'</option>').join('');
- const parsedLineItems=Array.isArray(ex.line_items)?ex.line_items.map(x=>({
+ const parsedLineItems=Array.isArray(ex.line_items)&&ex.line_items.length?ex.line_items.map(x=>({
   description:String(x.description||'').trim(),
   spec:typeof x.specification==='string'?x.specification:(x.specification?.text||''),
   quantity:Number(x.quantity||0),unit:String(x.unit||''),
