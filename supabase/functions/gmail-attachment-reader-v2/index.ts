@@ -1,3 +1,4 @@
+import { parseFlattenedQuoteLineItems } from "../_shared/quote-line-items.ts";
 import {createClient} from "npm:@supabase/supabase-js@2";
 import * as XLSX from "npm:xlsx@0.18.5";
 import JSZip from "npm:jszip@3.10.1";
@@ -49,18 +50,7 @@ function parse(t:string){
  }
  if (!line_items.length) {
   // PDF text can arrive as one flattened line with no pipe-delimited cells.
-  // Start after the item-table header; otherwise dates and validity periods can be
- // mistaken for the first numbered product row in flattened PDF text.
- const tableHeader=t.match(/(?:наименование|номенклатура|описание|товар)[\\s\\S]{0,180}?(?:кол-во|количество|qty)[\\s\\S]{0,120}?(?:цена|стоимость)[\\s\\S]{0,120}?(?:сумма|итого|total)/i);
- const flatText=tableHeader?t.slice(tableHeader.index!+tableHeader[0].length):t;
- const flatRow=/(?:^|\\s)(\\d{1,3})\\s+(.+?)\\s+(\\d+(?:[.,]\\d+)?)\\s+(шт\\.?|штук|лист(?:а|ов)?|м|метр(?:а|ов)?|кг|т|упак\\.?)\\s+([\\d\\s]+[,.]\\d{2})\\s+([\\d\\s]+[,.]\\d{2})(?=\\s+\\d{1,3}\\s+|\\s*(?:Стоимость товаров|ИТОГО)|$)/gi;
-  for(const match of flatText.matchAll(flatRow)){
-   const description=match[2].trim(),quantity=num(match[3]),unit_price=num(match[5]),total=num(match[6]);
-   if(!description||quantity===null||unit_price===null)continue;
-   line_items.push({description:description.slice(0,500),specification:{},quantity,unit:match[4].slice(0,40),unit_price,total,currency:currency(match[0])||documentCurrency,confidence:0.65,source_excerpt:match[0].trim().slice(0,1000)});
-   if(line_items.length>=150)break;
-  }
- }
+  if (!line_items.length) line_items = parseFlattenedQuoteLineItems(t, documentCurrency);
  const prices=[...t.matchAll(/([0-9][0-9\s]*(?:[.,][0-9]{1,2})?)\s*(₽|руб(?:\.|лей|ля)?|RUB|USD|EUR|€|\$)/gi)].map(m=>({amount:num(m[1])||0,currency:currency(m[2])||"RUB",excerpt:m[0]})).filter(x=>x.amount>0).slice(0,10);
  const lead=t.match(/(?:срок\s*(?:поставки|изготовления)?|поставка|отгрузка)[^\n]{0,60}?([0-9]{1,3})\s*(?:рабочих?\s*)?(дн(?:я|ей)?|день|сут(?:ок)?|недел(?:я|и|ь))/i);
  return {line_items,price_candidates:prices,lead_time_days:lead?Number(lead[1])*(/недел/i.test(lead[2])?7:1):null,availability:/в наличии|на складе/i.test(t)?"В наличии":/под заказ|изготовим/i.test(t)?"Под заказ":null,vat:/без\s+ндс/i.test(t)?"Без НДС":/с\s+ндс|ндс\s*20/i.test(t)?"С НДС":null,needs_review:true,extraction_method:"rules_v2"};
