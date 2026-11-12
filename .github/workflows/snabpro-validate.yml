@@ -37,3 +37,4 @@ jobs:
           deno check --no-lock supabase/functions/gmail-monitor/index.ts
           deno check --no-lock supabase/functions/gmail-attachment-reader-v2/index.ts
           deno check --no-lock supabase/functions/quote-document-parser/index.ts
+          deno test supabase/functions/_shared/quote-line-items.test.ts
