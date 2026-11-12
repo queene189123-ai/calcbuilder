@@ -91,8 +91,12 @@ function parseLineItems(text: string) {
 
   // Some PDFs flatten the whole table into one text line instead of preserving
   // cell separators. Recover common numbered quote rows from that representation.
-  const flatRow = /(?:^|\s)(\d{1,3})\s+(.+?)\s+(\d+(?:[.,]\d+)?)\s+(шт\.?|штук|лист(?:а|ов)?|м|метр(?:а|ов)?|кг|т|упак\.?)\s+([\d\s]+[,.]\d{2})\s+([\d\s]+[,.]\d{2})(?=\s+\d{1,3}\s+|\s*(?:Стоимость товаров|ИТОГО)|$)/gi;
-  for (const match of text.matchAll(flatRow)) {
+  // Begin at the detected item-table header so validity dates and other numbered
+  // metadata earlier in a flattened PDF cannot be misread as a product row.
+  const tableHeader = text.match(/(?:наименование|номенклатура|описание|товар)[\\s\\S]{0,180}?(?:кол-во|количество|qty)[\\s\\S]{0,120}?(?:цена|стоимость)[\\s\\S]{0,120}?(?:сумма|итого|total)/i);
+  const flatText = tableHeader ? text.slice(tableHeader.index! + tableHeader[0].length) : text;
+  const flatRow = /(?:^|\\s)(\\d{1,3})\\s+(.+?)\\s+(\\d+(?:[.,]\\d+)?)\\s+(шт\\.?|штук|лист(?:а|ов)?|м|метр(?:а|ов)?|кг|т|упак\\.?)\\s+([\\d\\s]+[,.]\\d{2})\\s+([\\d\\s]+[,.]\\d{2})(?=\\s+\\d{1,3}\\s+|\\s*(?:Стоимость товаров|ИТОГО)|$)/gi;
+  for (const match of flatText.matchAll(flatRow)) {
     const description = match[2].trim();
     const quantity = numberValue(match[3]);
     const unitPrice = numberValue(match[5]);
