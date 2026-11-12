@@ -1,3 +1,4 @@
+import { parseFlattenedQuoteLineItems } from "../_shared/quote-line-items.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import * as XLSX from "npm:xlsx@0.18.5";
 import JSZip from "npm:jszip@3.10.1";
@@ -43,6 +44,8 @@ function detectCurrency(value: string) {
 function parseLineItems(text: string) {
   const rows = text.split(/\r?\n/).map(line => line.split(/\s*\|\s*/).map(cell => cell.trim())).filter(row => row.some(Boolean));
   const items: any[] = [];
+  // Currency is often printed once in the document header, not on every row.
+  const documentCurrency = detectCurrency(text) || "RUB";
   const aliases: Record<string, string[]> = {
     description: ["наименование", "товар", "материал", "позиция", "номенклатура", "описание", "product", "item", "name"],
     specification: ["характеристика", "спецификация", "марка", "размер", "стандарт", "параметры", "grade", "specification"],
@@ -78,14 +81,18 @@ function parseLineItems(text: string) {
           specification: spec ? { text: spec.slice(0, 500) } : {},
           quantity, unit: unit.slice(0, 40) || null,
           unit_price: unitPrice, total,
-          currency: detectCurrency(row.join(" ")) || "RUB",
+          currency: detectCurrency(row.join(" ")) || documentCurrency,
           confidence: 0.75, source_excerpt: row.join(" | ").slice(0, 1000)
         });
       }
       break;
     }
   }
-  return items;
+  if (items.length) return items;
+
+  // Some PDFs flatten the whole table into one text line instead of preserving
+  // cell separators. Recover common numbered quote rows from that representation.
+  return parseFlattenedQuoteLineItems(text, documentCurrency);
 }
 function parseText(text: string) {
   const prices = [...text.matchAll(/([0-9][0-9\s]*(?:[.,][0-9]{1,2})?)\s*(₽|руб(?:\.|лей|ля)?|RUB|USD|EUR|€|\$)/gi)]
@@ -160,7 +167,7 @@ async function extractFile(bytes: Uint8Array, filename: string, mime: string) {
     return lines.join("\n").slice(0, 50000);
   }
   if (ext === "pdf" || mime === "application/pdf") {
-    const pdf = await getDocument({ data: bytes, disableWorker: true, isEvalSupported: false }).promise;
+    const pdf = await getDocument({ data: bytes, disableWorker: true, isEvalSupported: false } as any).promise;
     const lines: string[] = [];
     for (let pageNo = 1; pageNo <= Math.min(pdf.numPages, 60); pageNo++) {
       const page = await pdf.getPage(pageNo);

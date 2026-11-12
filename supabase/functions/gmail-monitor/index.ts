@@ -96,20 +96,6 @@ async function syncCompany(connection: any) {
   const companyId = connection.company_id;
   const refreshToken = await decrypt(connection.refresh_token_ciphertext);
   const token = await accessToken(refreshToken);
-  const listResponse = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=50&q=" + encodeURIComponent("in:inbox newer_than:30d"), {
-    headers: { Authorization: "Bearer " + token }
-  });
-  const listed = await listResponse.json();
-  if (!listResponse.ok) throw new Error(listed.error?.message || "Unable to list Gmail inbox");
-  const messageIds = (listed.messages || []).map((m: any) => String(m.id)).filter(Boolean);
-  if (!messageIds.length) { await recordRun(companyId, "ok", 0); return { companyId, discovered: 0, saved: 0 }; }
-
-  const { data: existing, error: existingError } = await db.from("gmail_monitor_seen_messages")
-    .select("gmail_message_id").eq("company_id", companyId).in("gmail_message_id", messageIds);
-  if (existingError) throw existingError;
-  const known = new Set((existing || []).map((x: any) => x.gmail_message_id));
-  const freshIds = messageIds.filter((id: string) => !known.has(id));
-  if (!freshIds.length) { await recordRun(companyId, "ok", 0); return { companyId, discovered: messageIds.length, saved: 0 }; }
 
   const [{ data: suppliers, error: supplierError }, { data: links, error: linkError }] = await Promise.all([
     db.from("suppliers").select("id,name,email").eq("company_id", companyId),
@@ -117,22 +103,74 @@ async function syncCompany(connection: any) {
   ]);
   if (supplierError) throw supplierError;
   if (linkError) throw linkError;
+
+  // Only search messages that can be tied to a known supplier or an issued
+  // purchase-request token. This prevents newsletters and unrelated inbox mail
+  // from filling the procurement review queue.
+  const supplierEmails = [...new Set([
+    ...(suppliers || []).map((s: any) => String(s.email || "")),
+    ...(links || []).map((x: any) => String(x.supplier_email || ""))
+  ])].map((value: string) => value.trim().toLowerCase())
+    .filter((value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value));
+  const subjectTokens = [...new Set((links || []).map((x: any) => String(x.subject_token || "")))]
+    .filter((value: string) => /^SP-[A-Z0-9-]{3,80}$/i.test(value));
+  const searchTerms = [
+    ...supplierEmails.map((email: string) => "from:" + email),
+    ...subjectTokens.map((value: string) => "subject:" + value)
+  ];
+  if (!searchTerms.length) {
+    await recordRun(companyId, "ok", 0);
+    return { companyId, discovered: 0, saved: 0, skipped: 0, failed: 0 };
+  }
+
+  const gmailQuery = "in:inbox newer_than:30d {" + searchTerms.join(" ") + "}";
+  const listResponse = await fetch(
+    "https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=100&q=" + encodeURIComponent(gmailQuery),
+    { headers: { Authorization: "Bearer " + token } }
+  );
+  const listed = await listResponse.json();
+  if (!listResponse.ok) throw new Error(listed.error?.message || "Unable to list relevant Gmail messages");
+  const messageIds = (listed.messages || []).map((m: any) => String(m.id)).filter(Boolean);
+  if (!messageIds.length) {
+    await recordRun(companyId, "ok", 0);
+    return { companyId, discovered: 0, saved: 0, skipped: 0, failed: 0 };
+  }
+
+  const { data: existing, error: existingError } = await db.from("gmail_monitor_seen_messages")
+    .select("gmail_message_id").eq("company_id", companyId).in("gmail_message_id", messageIds);
+  if (existingError) throw existingError;
+  const known = new Set((existing || []).map((x: any) => x.gmail_message_id));
+  const freshIds = messageIds.filter((id: string) => !known.has(id));
+  if (!freshIds.length) {
+    await recordRun(companyId, "ok", 0);
+    return { companyId, discovered: messageIds.length, saved: 0, skipped: 0, failed: 0 };
+  }
+
   const supplierByEmail = new Map((suppliers || []).filter((s: any) => s.email)
     .map((s: any) => [String(s.email).trim().toLowerCase(), s]));
-  let saved = 0;
+  let saved = 0, skipped = 0;
+  const failures: string[] = [];
+
   for (const messageId of freshIds) {
-    const metadataResponse = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/" + encodeURIComponent(messageId) + "?format=metadata&metadataHeaders=From&metadataHeaders=Subject", {
-      headers: { Authorization: "Bearer " + token }
-    });
+    const metadataResponse = await fetch(
+      "https://gmail.googleapis.com/gmail/v1/users/me/messages/" + encodeURIComponent(messageId) +
+      "?format=metadata&metadataHeaders=From&metadataHeaders=Subject",
+      { headers: { Authorization: "Bearer " + token } }
+    );
     const metadata = await metadataResponse.json();
-    if (!metadataResponse.ok) continue;
+    if (!metadataResponse.ok) {
+      failures.push("Metadata " + messageId + ": " + (metadata.error?.message || metadataResponse.status));
+      continue;
+    }
     const headers = metadata.payload?.headers || [];
     const from = header(headers, "From");
     const fromEmail = (from.match(/<([^>]+)>/)?.[1] || from).trim().toLowerCase();
     if (!fromEmail || fromEmail === String(connection.gmail_address || "").toLowerCase()) {
       await markSeen(companyId, messageId);
+      skipped++;
       continue;
     }
+
     const subject = header(headers, "Subject");
     const tokenMatch = subject.match(/\[(SP-[A-Z0-9-]+)\]/i);
     const subjectToken = tokenMatch?.[1] || null;
@@ -142,16 +180,27 @@ async function syncCompany(connection: any) {
     const supplier = requestLink?.supplier_id
       ? (suppliers || []).find((s: any) => s.id === requestLink.supplier_id)
       : supplierByEmail.get(fromEmail);
-    // Keep external messages from unknown senders too. They remain unassigned
-    // in the inbox so a buyer can review and map new suppliers instead of losing them.
-    const response = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/" + encodeURIComponent(messageId) + "?format=full", {
-      headers: { Authorization: "Bearer " + token }
-    });
+
+    // A token alone is not enough if the sender does not match its intended supplier.
+    // Ignore unmatched messages so an arbitrary sender cannot create procurement records.
+    if (!supplier && !requestLink) {
+      await markSeen(companyId, messageId);
+      skipped++;
+      continue;
+    }
+
+    const response = await fetch(
+      "https://gmail.googleapis.com/gmail/v1/users/me/messages/" + encodeURIComponent(messageId) + "?format=full",
+      { headers: { Authorization: "Bearer " + token } }
+    );
     const message = await response.json();
-    if (!response.ok) continue;
+    if (!response.ok) {
+      failures.push("Message " + messageId + ": " + (message.error?.message || response.status));
+      continue;
+    }
     const texts: string[] = [], attachments: any[] = [];
     collectParts(message.payload, texts, attachments);
-    const bodyText = (texts.join("\\n\\n").slice(0, 30000) || message.snippet || "");
+    const bodyText = (texts.join("\n\n").slice(0, 30000) || message.snippet || "");
     const extracted = parseSupplierReply(bodyText);
     const receivedAt = message.internalDate ? new Date(Number(message.internalDate)).toISOString() : null;
     const row = {
@@ -166,22 +215,27 @@ async function syncCompany(connection: any) {
     const { error: insertError } = await db.from("supplier_email_messages").upsert(row, {
       onConflict: "company_id,gmail_message_id", ignoreDuplicates: true
     });
-    if (!insertError) {
-      saved++;
-      // Mark as seen only after the message is safely persisted. Transient Gmail/DB
-      // failures leave it eligible for the next scheduled sync.
-      await markSeen(companyId, messageId);
-      if (requestLink) {
-        const { error: replyStatusError } = await db.from("purchase_request_suppliers")
-          .update({ status: "replied", replied_at: receivedAt || new Date().toISOString() })
-          .eq("company_id", companyId).eq("subject_token", requestLink.subject_token)
-          .eq("supplier_email", fromEmail);
-        if (replyStatusError) console.error("Unable to update supplier reply status", companyId, messageId, replyStatusError.message);
-      }
-    } else console.error("Unable to save Gmail message", companyId, messageId, insertError.message);
+    if (insertError) {
+      failures.push("Save " + messageId + ": " + insertError.message);
+      continue;
+    }
+
+    saved++;
+    // Mark as seen only after the message is safely persisted. Transient failures
+    // remain eligible for the next scheduled sync.
+    await markSeen(companyId, messageId);
+    if (requestLink) {
+      const { error: replyStatusError } = await db.from("purchase_request_suppliers")
+        .update({ status: "replied", replied_at: receivedAt || new Date().toISOString() })
+        .eq("company_id", companyId).eq("subject_token", requestLink.subject_token)
+        .eq("supplier_email", fromEmail);
+      if (replyStatusError) failures.push("Reply status " + messageId + ": " + replyStatusError.message);
+    }
   }
-  await recordRun(companyId, "ok", saved);
-  return { companyId, discovered: messageIds.length, saved };
+
+  const lastError = failures.length ? failures.slice(0, 5).join("; ").slice(0, 1000) : null;
+  await recordRun(companyId, failures.length ? "error" : "ok", saved, lastError);
+  return { companyId, discovered: messageIds.length, saved, skipped, failed: failures.length };
 }
 
 Deno.serve(async (req: Request) => {
