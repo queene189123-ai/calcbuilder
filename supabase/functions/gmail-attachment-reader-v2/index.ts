@@ -48,9 +48,7 @@ function parse(t:string){
   for(let j=i+1;j<rows.length&&line_items.length<150;j++){const r=rows[j],get=(k:string)=>h[k]===undefined?"":r[h[k]]||"",description=get("description");if(!description||/^(итого|всего|ндс|сумма к оплате|подпись)/i.test(description))continue;const quantity=num(get("quantity")),unit_price=num(get("unit_price")),total=num(get("total"));if(quantity===null&&unit_price===null&&total===null)continue;const spec=get("specification");line_items.push({description:description.slice(0,500),specification:spec?{text:spec.slice(0,500)}:{},quantity,unit:get("unit").slice(0,40)||null,unit_price,total,currency:currency(r.join(" "))||documentCurrency,confidence:0.75,source_excerpt:r.join(" | ").slice(0,1000)});}
   break;
  }
- if (!line_items.length) {
-  // PDF text can arrive as one flattened line with no pipe-delimited cells.
-  if (!line_items.length) line_items = parseFlattenedQuoteLineItems(t, documentCurrency);
+ if (!line_items.length) line_items = parseFlattenedQuoteLineItems(t, documentCurrency);
  const prices=[...t.matchAll(/([0-9][0-9\s]*(?:[.,][0-9]{1,2})?)\s*(₽|руб(?:\.|лей|ля)?|RUB|USD|EUR|€|\$)/gi)].map(m=>({amount:num(m[1])||0,currency:currency(m[2])||"RUB",excerpt:m[0]})).filter(x=>x.amount>0).slice(0,10);
  const lead=t.match(/(?:срок\s*(?:поставки|изготовления)?|поставка|отгрузка)[^\n]{0,60}?([0-9]{1,3})\s*(?:рабочих?\s*)?(дн(?:я|ей)?|день|сут(?:ок)?|недел(?:я|и|ь))/i);
  return {line_items,price_candidates:prices,lead_time_days:lead?Number(lead[1])*(/недел/i.test(lead[2])?7:1):null,availability:/в наличии|на складе/i.test(t)?"В наличии":/под заказ|изготовим/i.test(t)?"Под заказ":null,vat:/без\s+ндс/i.test(t)?"Без НДС":/с\s+ндс|ндс\s*20/i.test(t)?"С НДС":null,needs_review:true,extraction_method:"rules_v2"};
