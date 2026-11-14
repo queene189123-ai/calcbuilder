@@ -39,7 +39,15 @@
         const inboxData=await inbox(),monitor=inboxData?.monitor;
         if(statusEl()&&monitor?.last_checked_at){
           const checked=new Date(monitor.last_checked_at).toLocaleString("ru-RU",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"});
-          statusEl().textContent="Подключён: "+d.connection.gmail_address+" · автопроверка каждые 10 минут · проверено "+checked+(monitor.status==="error"?" · ошибка: "+(monitor.last_error||"см. журнал"):"");
+          const lastError=monitor.last_error||"см. журнал";
+          const needsReconnect=monitor.status==="error"&&/expired or revoked|invalid_grant/i.test(lastError);
+          const reconnected=new URLSearchParams(location.search).get("gmail")==="connected";
+          statusEl().textContent=needsReconnect&&!reconnected
+            ? "Требуется переподключить Gmail ("+d.connection.gmail_address+"). Нажмите кнопку «Переподключить Gmail»."
+            : "Подключён: "+d.connection.gmail_address+" · автопроверка каждые 10 минут · проверено "+checked+(monitor.status==="error"?(reconnected?" · переподключение выполнено, ожидаем следующую проверку":" · ошибка: "+lastError):"");
+          statusEl().classList.toggle("error",monitor.status==="error"&&!reconnected);
+          const connectButton=$("gmailConnect");
+          if(connectButton)connectButton.textContent=needsReconnect&&!reconnected?"Переподключить Gmail":"Подключить Gmail";
         }else if(statusEl())statusEl().textContent="Подключён: "+d.connection.gmail_address+" · автопроверка каждые 10 минут · ожидаем первую проверку";
       }
     } catch(e) { if(statusEl()) {statusEl().textContent=e.message;statusEl().classList.add("error");} }
