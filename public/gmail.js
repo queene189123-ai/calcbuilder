@@ -40,7 +40,7 @@
         if(statusEl()&&monitor?.last_checked_at){
           const checked=new Date(monitor.last_checked_at).toLocaleString("ru-RU",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"});
           const lastError=monitor.last_error||"см. журнал";
-          const needsReconnect=monitor.status==="error"&&/expired or revoked|invalid_grant/i.test(lastError);
+          const needsReconnect=monitor.status==="reauth_required"||(monitor.status==="error"&&/expired or revoked|expired|revoked|invalid_grant/i.test(lastError));
           const reconnected=new URLSearchParams(location.search).get("gmail")==="connected";
           statusEl().textContent=needsReconnect&&!reconnected
             ? "Требуется переподключить Gmail ("+d.connection.gmail_address+"). Нажмите кнопку «Переподключить Gmail»."
