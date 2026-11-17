@@ -787,3 +787,19 @@ window.snabproResetWorkspace=function(){
  renderAll();
 };
 
+
+
+// Резервная копия данных рабочего пространства в JSON.
+function exportWorkspaceBackup(){
+ const keys=['sp_materials','sp_suppliers','sp_purchases','sp_material_folders','sp_email_drafts'];
+ const backup={product:'СнабПро',exportedAt:new Date().toISOString(),data:{}};
+ keys.forEach(key=>{
+  try{const raw=localStorage.getItem(key);backup.data[key]=raw?JSON.parse(raw):[];}
+  catch(error){backup.data[key]=null;}
+ });
+ const blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json;charset=utf-8'});
+ const url=URL.createObjectURL(blob),a=document.createElement('a');
+ a.href=url;a.download='snabpro-backup-'+new Date().toISOString().slice(0,10)+'.json';
+ document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+ if(typeof toast==='function')toast('Резервная копия подготовлена');
+}
