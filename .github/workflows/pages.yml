@@ -1,4 +1,4 @@
-name: Deploy CalcBuilder to GitHub Pages
+name: Deploy SnabPro to GitHub Pages
 
 on:
   push:
@@ -27,8 +27,13 @@ jobs:
         uses: actions/configure-pages@v5
         with:
           enablement: true
-      - name: Validate JavaScript
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Validate site entry and JavaScript
         run: |
+          test -s public/index.html
           node --check public/app.js
           node --check public/auth.js
           node --check public/gmail.js
